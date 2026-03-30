@@ -1,312 +1,266 @@
 package com.trolmastercard.sexmod.event;
-import com.trolmastercard.sexmod.PlayerKoboldEntity;
-import com.trolmastercard.sexmod.NpcInventoryEntity;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
+import com.trolmastercard.sexmod.entity.AllieEntity;
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
+import com.trolmastercard.sexmod.entity.NpcInventoryEntity;
+import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;
+import com.trolmastercard.sexmod.entity.SlimeNpcEntity;
+import com.trolmastercard.sexmod.registry.AnimState;
+import com.trolmastercard.sexmod.util.ModConstants;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.damagesource.DamageSource;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.event.entity.living.LivingDamageEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.entity.player.SleepingLocationCheckEvent;
-import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.network.PacketDistributor;
-import net.minecraft.client.gui.components.Button;
+import net.minecraftforge.fml.common.Mod;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Global Forge event handler for player-NPC interaction logic.
- *
- * Covers:
- *  - Blocking sleep when a PlayerKoboldEntity is controlling the player
- *  - Bed right-click to position and start a sex scene
- *  - Player respawn sync for PlayerKoboldEntity
- *  - Inventory screen strip/dress button (client)
- *  - LivingHurt / LivingDamage cancellation during sex states
- *  - Entity interact (player-on-player sex proposal)
+ * PlayerSexEventHandler — Portado a 1.20.1.
+ * * Maneja las interacciones físicas del avatar del jugador (cama, daño, interfaces).
+ * * Dividido en CommonEvents (Servidor/Cliente) y ClientEvents (Solo Cliente) para evitar crasheos.
  */
 public class PlayerSexEventHandler {
 
-    static final int STRIP_BUTTON_ID = 284453;
+    // ── EVENTOS COMUNES (Cliente y Servidor) ─────────────────────────────────
 
-    // -- Sleep prevention ------------------------------------------------------
+    @Mod.EventBusSubscriber(modid = ModConstants.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+    public static class CommonEvents {
 
-    @SubscribeEvent
-    public void onPlayerSleep(SleepingLocationCheckEvent event) {
-        // Note: 1.20.1 uses SleepingLocationCheckEvent; deny sleep if player
-        // is currently controlled by a PlayerKoboldEntity.
-        Player player = event.getEntity();
-        PlayerKoboldEntity kobold = PlayerKoboldEntity.getForPlayer(player);
-        if (kobold == null) return;
-        if (!player.isSleeping()) return;
-        event.setResult(Event.Result.DENY);
-    }
-
-    // -- Bed right-click: start sex scene -------------------------------------
-
-    /**
-     * Intercepts right-clicking on a bed block for a PlayerKoboldEntity (NPC)
-     * that is controlled by the clicking player. Positions both NPC and player
-     * adjacent to the bed, then starts the STARTDOGGY animation.
-     */
-    @SubscribeEvent
-    public void onRightClickBedForNpc(PlayerInteractEvent.RightClickBlock event) {
-        PlayerKoboldEntity kobold = PlayerKoboldEntity.getByUUID(
-                event.getEntity().getUUID());
-        BlockPos clickedPos = event.getPos();
-        Level world = event.getEntity().level();
-        Player player = event.getEntity();
-
-        if (kobold == null) return;
-        if (!kobold.isOwner()) return;   // only the NPC that owns this player
-        if (!NpcWorldUtil.isBedBlock(world, clickedPos, event.getHitVec(),
-                event.getFace(), player)) return;
-
-        // Block interaction if NPC is already immovable (in sex)
-        if (kobold.entityData.get(BaseNpcEntity.DATA_IMMOVABLE)) {
-            event.setCanceled(true);
-            return;
+        // ── Prevención de Dormir ──
+        @SubscribeEvent
+        public static void onPlayerSleep(SleepingLocationCheckEvent event) {
+            if (!(event.getEntity() instanceof Player player)) return;
+            PlayerKoboldEntity kobold = PlayerKoboldEntity.getForPlayer(player);
+            if (kobold == null || !player.isSleeping()) return;
+            event.setResult(Event.Result.DENY);
         }
-        if (!player.isSleeping()) return;
 
-        // Collect adjacent air blocks for positioning
-        ArrayList<BlockPos> candidates = new ArrayList<>();
-        BlockPos up    = clickedPos.above();
-        BlockPos north = clickedPos.north();
-        BlockPos south = clickedPos.south();
-        BlockPos east  = clickedPos.east();
+        // ── Interacción con Cama (Click Derecho) ──
+        @SubscribeEvent
+        public static void onRightClickBedForNpc(PlayerInteractEvent.RightClickBlock event) {
+            Player player = event.getEntity();
+            Level level = event.getLevel();
+            PlayerKoboldEntity kobold = PlayerKoboldEntity.getForPlayer(player);
 
-        if (world.getBlockState(up).getBlock()    == Blocks.AIR) candidates.add(up);
-        if (world.getBlockState(north).getBlock() == Blocks.AIR) candidates.add(north);
-        if (world.getBlockState(south).getBlock() == Blocks.AIR) candidates.add(south);
-        if (world.getBlockState(east).getBlock()  == Blocks.AIR) candidates.add(east);
+            if (kobold == null || !kobold.isOwner()) return;
 
-        // Pick closest candidate to player
-        BlockPos chosen = null;
-        for (BlockPos bp : candidates) {
-            if (chosen == null) { chosen = bp; continue; }
+            BlockPos clickedPos = event.getPos();
+
+            // Asumiendo que isBedBlock se ha actualizado para usar BlockTags.BEDS
+            if (!NpcWorldUtil.isBedBlock(level, clickedPos, event.getHitVec(), event.getFace(), player)) return;
+
+            if (kobold.getEntityData().get(BaseNpcEntity.DATA_IMMOVABLE)) {
+                event.setCanceled(true);
+                return;
+            }
+            if (!player.isSleeping()) return;
+
+            // Buscar bloques de aire adyacentes
+            List<BlockPos> candidates = new ArrayList<>();
+            BlockPos[] checks = {clickedPos.above(), clickedPos.north(), clickedPos.south(), clickedPos.east()};
+
+            for (BlockPos bp : checks) {
+                if (level.getBlockState(bp).isAir()) candidates.add(bp);
+            }
+
+            BlockPos chosen = null;
             Vec3 pPos = player.position();
-            if (dist3(bp, pPos) < dist3(chosen, pPos)) chosen = bp;
+            for (BlockPos bp : candidates) {
+                if (chosen == null || bp.distToCenterSqr(pPos) < chosen.distToCenterSqr(pPos)) {
+                    chosen = bp;
+                }
+            }
+
+            if (chosen == null) {
+                player.displayClientMessage(Component.literal("§cLa cama está obstruida."), true);
+                return;
+            }
+
+            // Orientación
+            player.setPos(chosen.getX() + 0.5D, chosen.getY(), chosen.getZ() + 0.5D);
+            if (clickedPos.north().equals(chosen)) player.setYRot(90.0F);
+            else if (clickedPos.south().equals(chosen)) player.setYRot(180.0F);
+            else if (clickedPos.east().equals(chosen)) player.setYRot(-90.0F);
+            else player.setYRot(0.0F);
+
+            if (level.isClientSide()) {
+                ClientSafeCalls.handleBedInteract(kobold);
+                return;
+            }
+
+            // Lado del Servidor
+            Vec3 bedCenter = new Vec3(chosen.getX() + 0.5D, chosen.getY(), chosen.getZ() + 0.5D);
+            kobold.setPos(bedCenter.x, bedCenter.y, bedCenter.z);
+            kobold.setYRot(player.getYRot());
+            kobold.getEntityData().set(BaseNpcEntity.DATA_IMMOVABLE, true);
+            // Asumiendo que startSexAtPosition existe
+            kobold.startSexAtPosition();
         }
 
-        if (chosen == null) {
-            player.sendSystemMessage(Component.literal("Bed is obscured"));
-            return;
+        // ── Interacción en Suelo (NPC Inventory) ──
+        @SubscribeEvent
+        public static void onRightClickBlockForInventoryNpc(PlayerInteractEvent.RightClickBlock event) {
+            Player player = event.getEntity();
+            PlayerKoboldEntity kobold = PlayerKoboldEntity.getForPlayer(player);
+
+            if (!(kobold instanceof NpcInventoryEntity)) return;
+            if (!player.isSleeping() || !player.getMainHandItem().isEmpty()) return;
+            if (kobold.getEntityData().get(BaseNpcEntity.DATA_IMMOVABLE)) return;
+            if (player.getXRot() < 20.0F) return;
+
+            Vec3 hitVec = event.getHitVec();
+            if (hitVec.distanceToSqr(player.position()) > 9.0D) return; // 3.0D al cuadrado
+
+            Vec3 snapPos = new Vec3(hitVec.x, Math.floor(hitVec.y), hitVec.z);
+            player.setPos(snapPos.x, snapPos.y, snapPos.z);
+            kobold.setPos(snapPos.x, snapPos.y, snapPos.z);
+            kobold.setYRot(player.getYRot());
+            kobold.getEntityData().set(BaseNpcEntity.DATA_IMMOVABLE, true);
+            kobold.getEntityData().set(BaseNpcEntity.DATA_OUTFIT_INDEX, 0);
+            kobold.setAnimState(AnimState.STARTDOGGY);
+
+            if (event.getLevel().isClientSide()) {
+                ClientSafeCalls.setThirdPerson();
+            }
         }
 
-        // Orient player
-        player.setPos(chosen.getX() + 0.5D, chosen.getY(), chosen.getZ() + 0.5D);
-        if (clickedPos.above().equals(chosen))  player.setYRot(0.0F);
-        if (clickedPos.north().equals(chosen))  player.setYRot(90.0F);
-        if (clickedPos.south().equals(chosen))  player.setYRot(180.0F);
-        if (clickedPos.east().equals(chosen))   player.setYRot(-90.0F);
+        // ── Sincronización al Reaparecer ──
+        @SubscribeEvent
+        public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+            Player player = event.getEntity();
+            PlayerKoboldEntity kobold = PlayerKoboldEntity.getForPlayer(player);
+            if (kobold == null) return;
 
-        if (world.isClientSide) {
-            ClientStateManager.setThirdPerson(false);
-            kobold.clientBedInteract();
-            return;
+            Vec3 pos = player.position();
+            kobold.setPos(pos.x, pos.y, pos.z);
+            // kobold.baseTick(); // Revisa si esto es seguro llamarlo en este evento
         }
 
-        // Server side: lock kobold to bed position and start sex
-        Vec3 bedCenter = new Vec3(chosen.getX() + 0.5D, chosen.getY(), chosen.getZ() + 0.5D);
-        kobold.setPos(bedCenter);
-        kobold.setYRot(player.getYRot());
-        kobold.entityData.set(BaseNpcEntity.DATA_IMMOVABLE, true);
-        kobold.startSexAtPosition();
-    }
+        // ── Cancelar Daño por Caída ──
+        @SubscribeEvent
+        public static void onLivingHurt(LivingHurtEvent event) {
+            if (!(event.getEntity() instanceof Player player)) return;
+            // En 1.20.1 se usan Tags para identificar el tipo de daño de forma segura
+            if (!event.getSource().is(DamageTypeTags.IS_FALL)) return;
 
-    private double dist3(BlockPos bp, Vec3 v) {
-        double dx = bp.getX() - v.x;
-        double dy = bp.getY() - v.y;
-        double dz = bp.getZ() - v.z;
-        return Math.sqrt(dx*dx + dy*dy + dz*dz);
-    }
+            PlayerKoboldEntity kobold = PlayerKoboldEntity.getForPlayer(player);
+            if (kobold instanceof AllieEntity || kobold instanceof SlimeNpcEntity) {
+                event.setCanceled(true);
+            }
+        }
 
-    // -- Bed right-click: NpcInventoryEntity (ec) self-position ---------------
+        @SubscribeEvent
+        public static void onLivingDamage(LivingDamageEvent event) {
+            if (!(event.getEntity() instanceof Player player)) return;
+            if (!event.getSource().is(DamageTypeTags.IS_FALL)) return;
 
-    /**
-     * Handles a right-click on a floor block by a NpcInventoryEntity-controlled
-     * player. Snaps the NPC to the floor surface and starts STARTDOGGY.
-     */
-    @SubscribeEvent
-    public void onRightClickBlockForInventoryNpc(PlayerInteractEvent.RightClickBlock event) {
-        Player player = event.getEntity();
-        PlayerKoboldEntity kobold = PlayerKoboldEntity.getForPlayer(player);
-        if (kobold == null) return;
-        if (!(kobold instanceof NpcInventoryEntity)) return;
-        if (!player.isSleeping()) return;
-        if (!player.getMainHandItem().equals(ItemStack.EMPTY)) return;
-        if (kobold.entityData.get(BaseNpcEntity.DATA_IMMOVABLE)) return;
-        if (player.getXRot() < 20.0F) return;
-
-        Vec3 hitVec = event.getHitVec();
-        if (hitVec == null) return;
-        if (hitVec.distanceTo(player.position()) > 3.0D) return;
-
-        Vec3 snapPos = new Vec3(hitVec.x, Math.floor(hitVec.y), hitVec.z);
-        player.setPos(snapPos.x, Math.floor(hitVec.y), snapPos.z);
-        kobold.setPos(snapPos);
-        kobold.setYRot(player.getYRot());
-        kobold.entityData.set(BaseNpcEntity.DATA_IMMOVABLE, true);
-        kobold.entityData.set(BaseNpcEntity.DATA_OUTFIT_INDEX, 0);
-        kobold.setAnimState(AnimState.STARTDOGGY);
-
-        if (event.getLevel().isClientSide) {
-            if (Minecraft.getInstance().player != null &&
-                    Minecraft.getInstance().player.getUUID().equals(player.getUUID())) {
-                ClientStateManager.setThirdPerson(false);
+            PlayerKoboldEntity kobold = PlayerKoboldEntity.getForPlayer(player);
+            if (kobold instanceof NpcInventoryEntity) {
+                event.setAmount(0.0F);
+                event.setCanceled(true);
             }
         }
     }
 
-    // -- Player respawn sync ---------------------------------------------------
-
-    @SubscribeEvent
-    public void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
-        Player player = event.getEntity();
-        if (player == null) return;
-        PlayerKoboldEntity kobold = PlayerKoboldEntity.getByUUID(player.getUUID());
-        if (kobold == null) return;
-        Vec3 pos = player.position();
-        kobold.level(player.level());
-        kobold.setPos(pos.x, pos.y, pos.z);
-        kobold.baseTick();
-        System.out.println(player.level().isLoaded(kobold.blockPosition()));
-    }
-
-    // -- Player entity interact (sex proposal between players) -----------------
-
-    /** Triggered when a controlled NPC player (ei) right-clicks a non-NPC player target. */
-    @OnlyIn(Dist.CLIENT)
-    @SubscribeEvent
-    public void onEntityInteractAsNpc(PlayerInteractEvent.EntityInteract event) {
-        if (!(event.getTarget() instanceof Player)) return;
-        if (!event.getEntity().getUUID().equals(
-                Minecraft.getInstance().player.getUUID())) return;
-
-        LocalPlayer local = Minecraft.getInstance().player;
-        PlayerKoboldEntity selfKobold  = PlayerKoboldEntity.getByUUID(local.getUUID());
-        Player target     = (Player) event.getTarget();
-        PlayerKoboldEntity targetKobold = PlayerKoboldEntity.getForPlayer(target);
-
-        if (targetKobold == null) return;
-        if (selfKobold != null) {
-            local.displayClientMessage(Component.literal("no lesbo yet owo"), true);
-            return;
-        }
-        if (!targetKobold.canAcceptSexProposal()) return;
-        if (targetKobold.isWaitingForProposal()) {
-            targetKobold.proposeToPlayer(local);
-        }
-    }
-
-    /** Triggered when a normal player right-clicks a player controlled by a NPC (ei). */
-    @OnlyIn(Dist.CLIENT)
-    @SubscribeEvent
-    public void onEntityInteractOnNpcPlayer(PlayerInteractEvent.EntityInteract event) {
-        if (!(event.getTarget() instanceof Player)) return;
-        if (!event.getEntity().getUUID().equals(
-                Minecraft.getInstance().player.getUUID())) return;
-
-        LocalPlayer local = Minecraft.getInstance().player;
-        PlayerKoboldEntity selfKobold  = PlayerKoboldEntity.getByUUID(local.getUUID());
-        if (selfKobold == null) return;
-
-        Player target       = (Player) event.getTarget();
-        PlayerKoboldEntity targetKobold = PlayerKoboldEntity.getByUUID(target.getUUID());
-        if (targetKobold != null) {
-            target.displayClientMessage(Component.literal("no lesbo yet owo"), true);
-            return;
-        }
-        if (selfKobold.isWaitingForProposal()) {
-            selfKobold.waitingForPlayerResponse = false;
-            selfKobold.proposeToPlayer(target);
-        }
-    }
-
-    // -- LivingHurt: cancel fall damage during sex -----------------------------
-
-    @SubscribeEvent
-    public void onLivingHurt(LivingHurtEvent event) {
-        if (!event.getSource().equals(event.getEntity().level().damageSources().fall())) return;
-        if (!(event.getEntity() instanceof Player player)) return;
-        PlayerKoboldEntity kobold = PlayerKoboldEntity.getForPlayer(player);
-        if (kobold == null) return;
-        if (kobold instanceof AllieEntity || kobold instanceof SlimeNpcEntity) {
-            event.setCanceled(true);
-        }
-    }
-
-    // -- Inventory screen: add strip/dress button ------------------------------
+    // ── EVENTOS EXCLUSIVOS DEL CLIENTE ───────────────────────────────────────
 
     @OnlyIn(Dist.CLIENT)
-    @SubscribeEvent
-    public void onInventoryScreenInit(ScreenEvent.Init.Post event) {
-        Screen gui = event.getScreen();
-        if (!(gui instanceof InventoryScreen) && !(gui instanceof CreativeModeInventoryScreen)) return;
+    @Mod.EventBusSubscriber(modid = ModConstants.MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
+    public static class ClientEvents {
 
-        LocalPlayer local = Minecraft.getInstance().player;
-        if (local == null) return;
-        PlayerKoboldEntity kobold = PlayerKoboldEntity.getForPlayer(local);
-        if (kobold == null) return;
-        if (kobold.isCustomizable()) return;
+        // ── Botón de Ropa en el Inventario ──
+        @SubscribeEvent
+        public static void onInventoryScreenInit(ScreenEvent.Init.Post event) {
+            Screen gui = event.getScreen();
+            if (!(gui instanceof InventoryScreen) && !(gui instanceof CreativeModeInventoryScreen)) return;
 
-        String label = net.minecraft.client.resources.language.I18n.get(
-                kobold.getOutfitLevel() == 0 ? "action.names.dressup" : "action.names.strip");
+            LocalPlayer local = Minecraft.getInstance().player;
+            if (local == null) return;
 
-        Button stripBtn = Button.builder(Component.literal(label), btn -> onStripButtonClick(local, kobold))
-                .pos((int)(gui.width * 0.5D - 35), (int)(gui.height * 0.87D))
-                .size(70, 20)
-                .build();
+            PlayerKoboldEntity kobold = PlayerKoboldEntity.getForPlayer(local);
+            if (kobold == null || kobold.isCustomizable()) return;
 
-        event.addListener(stripBtn);
+            String labelKey = kobold.getOutfitLevel() == 0 ? "action.names.dressup" : "action.names.strip";
+
+            // En 1.20.1, I18n ha sido reemplazado por Component.translatable
+            Button stripBtn = Button.builder(Component.translatable(labelKey), btn -> onStripButtonClick(local, kobold))
+                    .pos((int)(gui.width * 0.5D - 35), (int)(gui.height * 0.87D))
+                    .size(70, 20)
+                    .build();
+
+            event.addListener(stripBtn);
+        }
+
+        private static void onStripButtonClick(LocalPlayer local, PlayerKoboldEntity kobold) {
+            if (kobold.isCustomizable() || kobold.getCurrentSexPartner() != null || kobold.getAnimState() != AnimState.NULL) return;
+
+            Minecraft mc = Minecraft.getInstance();
+            mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+            local.closeContainer(); // Cierra el inventario
+
+            kobold.setAnimState(AnimState.STRIP);
+            ClientStateManager.setThirdPerson(false);
+        }
+
+        // ── Propuestas entre Jugadores (Click Derecho a otro jugador) ──
+        @SubscribeEvent
+        public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
+            if (!(event.getTarget() instanceof Player target)) return;
+
+            LocalPlayer local = Minecraft.getInstance().player;
+            if (local == null || !event.getEntity().getUUID().equals(local.getUUID())) return;
+
+            PlayerKoboldEntity selfKobold = PlayerKoboldEntity.getForPlayer(local);
+            PlayerKoboldEntity targetKobold = PlayerKoboldEntity.getForPlayer(target);
+
+            // Yo soy NPC y le hago click a un jugador
+            if (selfKobold != null && targetKobold == null) {
+                target.displayClientMessage(Component.literal("§cNo lesbo yet owo"), true);
+                return;
+            }
+
+            // Yo soy jugador y le hago click a un NPC
+            if (selfKobold == null && targetKobold != null) {
+                if (targetKobold.canAcceptSexProposal() && targetKobold.isWaitingForProposal()) {
+                    targetKobold.proposeToPlayer(local);
+                }
+                return;
+            }
+        }
     }
 
-    @OnlyIn(Dist.CLIENT)
-    private void onStripButtonClick(LocalPlayer local, PlayerKoboldEntity kobold) {
-        if (kobold.isCustomizable()) return;
-        if (kobold.getCurrentSexPartner() != null) return;
-        if (kobold.getAnimState() != AnimState.NULL) return;
+    // ── Helper de Aislamiento de Cliente ─────────────────────────────────────
 
-        Minecraft mc = Minecraft.getInstance();
-        mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
-        mc.setScreen(null);
-        kobold.setAnimState(AnimState.STRIP);
-        ClientStateManager.setThirdPerson(false);
-        local.closeContainer();
-    }
+    private static class ClientSafeCalls {
+        @OnlyIn(Dist.CLIENT)
+        public static void handleBedInteract(PlayerKoboldEntity kobold) {
+            ClientStateManager.setThirdPerson(false);
+            // kobold.clientBedInteract(); // Descomenta si este método existe en tu porte
+        }
 
-    // -- LivingDamage: cancel void damage for floor-positioned NPCs -------------
-
-    @SubscribeEvent
-    public void onLivingDamage(LivingDamageEvent event) {
-        if (!event.getSource().equals(event.getEntity().level().damageSources().fall())) return;
-        if (!(event.getEntity() instanceof Player player)) return;
-        PlayerKoboldEntity kobold = PlayerKoboldEntity.getByUUID(player.getUUID());
-        if (kobold == null) return;
-        if (kobold instanceof NpcInventoryEntity) {
-            event.setResult(Event.Result.DENY);
-            event.setAmount(0.0F);
-            event.setCanceled(true);
+        @OnlyIn(Dist.CLIENT)
+        public static void setThirdPerson() {
+            ClientStateManager.setThirdPerson(false);
         }
     }
 }

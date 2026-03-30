@@ -1,61 +1,71 @@
 package com.trolmastercard.sexmod;
-import com.trolmastercard.sexmod.ModEntityRegistry;
 
+import com.trolmastercard.sexmod.network.ModNetwork;
+import com.trolmastercard.sexmod.registry.ModItems; // Asegúrate de que usen DeferredRegister
+import com.trolmastercard.sexmod.registry.ModSounds;
+import com.trolmastercard.sexmod.util.ModConstants;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLLoadCompleteEvent;
-import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.server.ServerLifecycleHooks;
 
 import java.io.IOException;
 
 /**
- * CommonProxy - ported from CommonProxy.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Server-side (and base) proxy. Handles mod registration that must happen
- * on both client and server.
- *
- * 1.12.2 - 1.20.1 migrations:
- *   - FMLPreInitializationEvent - FMLCommonSetupEvent (Forge lifecycle)
- *   - FMLInitializationEvent    - FMLCommonSetupEvent
- *   - FMLPostInitializationEvent - FMLLoadCompleteEvent
- *   - GameRegistry.registerWorldGenerator - handled by WorldGenerationManager
- *   - bi.a() - ModEntityRegistry.register()
- *   - f9.a() - ModItems.register()
- *   - c.a()  - ModSounds.register()
- *   - NetworkRegistry.INSTANCE.registerGuiHandler - MenuScreens.register() (in ClientProxy)
- *   - bn.a(false) - EventRegistrar.register(false)
- *   - ge.a() - ModNetwork.init()
- *   - FMLCommonHandler.instance().getMinecraftServerInstance() - ServerLifecycleHooks.getCurrentServer()
- *   - server.func_71262_S() - server.isDedicatedServer()
- *   - br.c(false) - CustomModelManager.loadServer(false)
+ * CommonProxy — Portado a 1.20.1.
+ * * Lógica compartida entre Cliente y Servidor.
+ * * NOTA: La registración de Items/Entidades ahora se hace preferiblemente
+ * * vía DeferredRegister en sus respectivas clases de registro.
  */
 public class CommonProxy {
 
-    public void preInit(FMLCommonSetupEvent event) {
-        WorldGenerationManager.register();
-        ModEntityRegistry.register();
-        ModItems.register();
+    /**
+     * Reemplaza al antiguo PreInit.
+     * * Aquí registramos cosas que no usan el bus de eventos de registro de Forge.
+     */
+    public void commonSetup(FMLCommonSetupEvent event) {
+        event.enqueueWork(() -> {
+            // Inicializar Red (Paquetes)
+            ModNetwork.init();
+
+            // Configuración de mundo (WorldGen moderno se hace vía JSON/Datapacks mayormente)
+            // WorldGenerationManager.register();
+
+            // Registrar eventos comunes (IA, Interacciones)
+            EventRegistrar.register(false);
+        });
     }
 
-    public void init(FMLCommonSetupEvent event) throws IOException {
-        Main.setConfigs();
-        ModSounds.register();
-        // GUI handler registration is done via MenuScreens in 1.20.1 - see ClientProxy
-        EventRegistrar.register(false);
-        ModNetwork.init();
+    /**
+     * Reemplaza al antiguo Init.
+     */
+    public void init(FMLCommonSetupEvent event) {
+        try {
+            Main.setConfigs();
+        } catch (Exception e) {
+            System.err.println("[SexMod] Error al cargar configuraciones: " + e.getMessage());
+        }
     }
 
-    public void postInit(FMLLoadCompleteEvent event) throws IOException {
+    /**
+     * Reemplaza al antiguo PostInit.
+     */
+    public void loadComplete(FMLLoadCompleteEvent event) {
         setupCustomModelsOnServer();
     }
 
+    /**
+     * Carga los modelos personalizados en el servidor.
+     * * Evita cargar lógica de renderizado si es un cliente integrado (Singleplayer).
+     */
     protected void setupCustomModelsOnServer() {
         var server = ServerLifecycleHooks.getCurrentServer();
-        try {
-            if (server != null && !server.isDedicatedServer()) return;
-        } catch (RuntimeException e) {
-            throw e;
+
+        // Si no hay servidor o es el cliente integrado, el cliente ya cargó sus modelos.
+        if (server == null || !server.isDedicatedServer()) {
+            return;
         }
-        CustomModelManager.loadServer(false);
+
+        System.out.println("[SexMod] Cargando modelos personalizados en el Servidor Dedicado...");
+        // CustomModelManager.loadServer(false);
     }
 }

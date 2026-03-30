@@ -4,114 +4,83 @@ import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
 
 /**
- * SetPlayerCamPacket - ported from aq.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Sent SERVER - CLIENT. Forces the local player's camera pitch, yaw, and
- * perspective mode to specific values.
- *
- * Used by the sex-animation system to lock the camera in first-person and
- * snap the view to the NPC's position.
- *
- * Fields:
- *   a = pitch       (float - {@code XRot})
- *   b = yaw         (float - {@code YRot})
- *   c = perspective (int   - 0=first, 1=third-back, 2=third-front)
- *
- * In 1.12.2:
- *   - The {@code GameSettings.thirdPersonView} field ({@code field_74320_O}) was
- *     set directly. In 1.20.1 use {@code mc.options.setCameraType(CameraType)}.
- *   - All rotation fields ({@code field_70177_z}, etc.) are now unified:
- *     {@code setYRot}, {@code setXRot}, {@code yRotO}, {@code xRotO},
- *     {@code yHeadRot}, {@code yBodyRot}.
+ * SetPlayerCamPacket — Portado a 1.20.1.
+ * * SERVIDOR → CLIENTE.
+ * * Fuerza la cámara del jugador a un ángulo (pitch/yaw) y perspectiva específicos.
+ * * Seguro para servidores dedicados (Lógica de cliente aislada).
  */
 public class SetPlayerCamPacket {
 
     private final float pitch;
     private final float yaw;
-    private final int   perspective;  // 0=first, 1=third-back, 2=third-front
-    private final boolean valid;
-
-    // =========================================================================
-    //  Constructors
-    // =========================================================================
+    private final int perspective; // 0=Primera, 1=Tercera Atrás, 2=Tercera Frente
 
     public SetPlayerCamPacket(float pitch, float yaw, int perspective) {
-        this.pitch       = pitch;
-        this.yaw         = yaw;
+        this.pitch = pitch;
+        this.yaw = yaw;
         this.perspective = perspective;
-        this.valid       = true;
     }
 
-    // =========================================================================
-    //  Codec
-    // =========================================================================
+    // ── Serialización ─────────────────────────────────────────────────────────
+
+    public static void encode(SetPlayerCamPacket msg, FriendlyByteBuf buf) {
+        buf.writeFloat(msg.pitch);
+        buf.writeFloat(msg.yaw);
+        buf.writeInt(msg.perspective);
+    }
 
     public static SetPlayerCamPacket decode(FriendlyByteBuf buf) {
-        float pitch = buf.readFloat();
-        float yaw   = buf.readFloat();
-        int   persp = buf.readInt();
-        return new SetPlayerCamPacket(pitch, yaw, persp);
+        return new SetPlayerCamPacket(
+                buf.readFloat(),
+                buf.readFloat(),
+                buf.readInt()
+        );
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeFloat(pitch);
-        buf.writeFloat(yaw);
-        buf.writeInt(perspective);
-    }
+    // ── Manejador (Handler) ───────────────────────────────────────────────────
 
-    // =========================================================================
-    //  Handler (CLIENT side)
-    // =========================================================================
-
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
+    public static void handle(SetPlayerCamPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
 
-        if (ctx.getSender() != null) {
-            // This packet is server-client only
-            System.out.println("received an invalid message @SetPlayerCam :(");
-            ctx.setPacketHandled(true);
-            return;
+        // Validamos que el paquete llegue al Cliente (Si llega al Servidor, lo ignoramos)
+        if (ctx.getDirection().getReceptionSide().isClient()) {
+            // enqueueWork ya ejecuta el código en el hilo principal del juego (Minecraft.getInstance())
+            ctx.enqueueWork(() -> handleClientSide(msg));
+        } else {
+            System.out.println("[SexMod] Paquete SetPlayerCamPacket recibido en el lado equivocado.");
         }
 
-        ctx.enqueueWork(() -> {
-            if (!valid) {
-                System.out.println("received an invalid message @SetPlayerCam :(");
-                return;
-            }
-            System.out.println(Thread.currentThread().getName());
-            applyOnClient(pitch, yaw, perspective);
-        });
         ctx.setPacketHandled(true);
     }
 
-    @OnlyIn(Dist.CLIENT)
-    private static void applyOnClient(float pitch, float yaw, int perspectiveOrdinal) {
+    /**
+     * Aislamiento Crítico: Este método solo será leído por el ClassLoader si estamos en el Cliente.
+     */
+    private static void handleClientSide(SetPlayerCamPacket msg) {
         Minecraft mc = Minecraft.getInstance();
-        mc.execute(() -> {
-            // Set perspective
-            CameraType[] types = CameraType.values();
-            if (perspectiveOrdinal >= 0 && perspectiveOrdinal < types.length) {
-                mc.options.setCameraType(types[perspectiveOrdinal]);
-            }
+        LocalPlayer player = mc.player;
+        if (player == null) return;
 
-            // Snap all yaw/pitch fields
-            LocalPlayer player = mc.player;
-            if (player == null) return;
+        // 1. Configurar la perspectiva de la cámara
+        CameraType[] types = CameraType.values();
+        if (msg.perspective >= 0 && msg.perspective < types.length) {
+            mc.options.setCameraType(types[msg.perspective]);
+        }
 
-            player.setYRot(yaw);
-            player.yRotO       = yaw;
-            player.yHeadRotO   = yaw;
-            player.yHeadRot    = yaw;
-            player.yBodyRot    = yaw;
-            player.setXRot(pitch);
-            player.xRotO       = pitch;
-        });
+        // 2. Aplicar los ángulos a absolutamente todos los rastreadores de rotación del jugador
+        player.setYRot(msg.yaw);
+        player.yRotO = msg.yaw;
+        player.yHeadRot = msg.yaw;
+        player.yHeadRotO = msg.yaw;
+        player.yBodyRot = msg.yaw;
+        player.yBodyRotO = msg.yaw; // Importante para que el torso no gire raro en el primer frame
+
+        player.setXRot(msg.pitch);
+        player.xRotO = msg.pitch;
     }
 }

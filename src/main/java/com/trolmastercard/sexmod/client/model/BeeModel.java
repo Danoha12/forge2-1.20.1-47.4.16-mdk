@@ -1,19 +1,21 @@
 package com.trolmastercard.sexmod.client.model;
 
+import com.trolmastercard.sexmod.entity.BeeEntity;
 import com.trolmastercard.sexmod.registry.AnimState;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import software.bernie.geckolib.constant.DataTickets;
 import software.bernie.geckolib.core.animatable.model.CoreGeoBone;
 import software.bernie.geckolib.core.animation.AnimationState;
-import software.bernie.geckolib.model.data.EntityModelData;
 
 /**
- * BeeModel - Portado a 1.20.1 / GeckoLib 4.
- * * Modelo para la entidad Abeja de la Tribu.
- * Maneja capas de armadura, visibilidad dinámica de huesos y rotación de cabeza.
+ * BeeModel — Portado a 1.20.1 / GeckoLib 4 y enmascarado (SFW).
+ *
+ * GeoModel para la entidad NPC "Bee". Dos archivos geo: base y capa de armadura.
+ * Este modelo ajusta el seguimiento de la cabeza y oculta secciones de la malla
+ * base (chest) dependiendo de la animación en curso.
  */
-public class BeeModel extends BaseNpcModel<BaseNpcEntity> {
+public class BeeModel extends BaseNpcModel<BeeEntity> {
 
     @Override
     protected ResourceLocation[] getGeoFiles() {
@@ -24,107 +26,104 @@ public class BeeModel extends BaseNpcModel<BaseNpcEntity> {
     }
 
     @Override
-    public ResourceLocation getTextureResource(BaseNpcEntity entity) {
+    public ResourceLocation getTextureResource(BeeEntity entity) {
         return new ResourceLocation("sexmod", "textures/entity/bee/bee.png");
     }
 
     @Override
-    public ResourceLocation getModelResource(BaseNpcEntity entity) {
-        return new ResourceLocation("sexmod", "geo/bee/bee.geo.json");
-    }
-
-    @Override
-    public ResourceLocation getAnimationResource(BaseNpcEntity entity) {
+    public ResourceLocation getAnimationResource(BeeEntity entity) {
         return new ResourceLocation("sexmod", "animations/bee/bee.animation.json");
     }
 
     // =========================================================================
-    //  Configuración de Animaciones Personalizadas
+    //  Animaciones Personalizadas y Cinemática Inversa (IK)
     // =========================================================================
 
     @Override
-    public void setCustomAnimations(BaseNpcEntity entity, long instanceId,
-                                    AnimationState<BaseNpcEntity> animState) {
+    public void setCustomAnimations(BeeEntity entity, long instanceId, AnimationState<BeeEntity> animState) {
         super.setCustomAnimations(entity, instanceId, animState);
 
-        // El procesamiento de huesos solo ocurre en el cliente
-        if (!entity.level().isClientSide) return;
+        // Proteger contra renderizados en menús (FakeLevel)
+        if (entity.level() == null) return;
 
         var processor = this.getAnimationProcessor();
 
-        // ---- Visibilidad del Torso (Se oculta a menos que la animación lo pida) ----
+        // ---- Visibilidad dinámica de la sección superior ----
         CoreGeoBone chest = processor.getBone("chest");
-        if (chest != null) {
-            var ctrl = entity.getMainAnimationController();
-            boolean chestAnim = ctrl != null
-                    && ctrl.getCurrentAnimation() != null
-                    && ctrl.getCurrentAnimation().animation().name().contains("chest");
+        if (chest != null && animState.getController() != null) {
+            var currentAnim = animState.getController().getCurrentAnimation();
+            boolean chestAnim = currentAnim != null && currentAnim.name().contains("chest");
             chest.setHidden(!chestAnim);
         }
 
-        // ---- Seguimiento de Cabeza (Solo en estados de espera o ataque) --------
+        // ---- Seguimiento de la cabeza (Head Look) ----
         AnimState state = entity.getAnimState();
         if (state == AnimState.NULL || state == AnimState.ATTACK || state == AnimState.BOW) {
             if (animState != null) {
-                EntityModelData md = animState.getData(DataTickets.ENTITY_MODEL_DATA);
+                var md = animState.getData(DataTickets.ENTITY_MODEL_DATA);
                 if (md != null) {
                     CoreGeoBone neck = processor.getBone("neck");
                     CoreGeoBone head = processor.getBone("head");
                     CoreGeoBone body = processor.getBone("body");
-                    if (body == null) body = processor.getBone("dd");
+                    if (body == null) body = processor.getBone("dd"); // Fallback a nombre de hueso antiguo
 
-                    // Aplicamos rotación suave basada en la mira del NPC
-                    if (neck != null) neck.setRotY(md.netHeadYaw() * 0.5F * (float)Math.PI / 180.0F);
-                    if (head != null) {
-                        head.setRotY(md.netHeadYaw() * (float)Math.PI / 180.0F);
-                        head.setRotX((float)Math.PI + md.headPitch() * (float)Math.PI / 180.0F);
+                    float netHeadYaw = md.netHeadYaw() * Mth.DEG_TO_RAD;
+                    float headPitch = md.headPitch() * Mth.DEG_TO_RAD;
+
+                    if (neck != null) {
+                        neck.updateRotation(neck.getRotX(), netHeadYaw * 0.5F, neck.getRotZ());
                     }
-                    if (body != null) body.setRotY(0.0F);
+                    if (head != null) {
+                        head.updateRotation((float)Math.PI + headPitch, netHeadYaw, head.getRotZ());
+                    }
+                    if (body != null) {
+                        body.updateRotation(body.getRotX(), 0.0F, body.getRotZ());
+                    }
                 }
             }
         }
     }
 
     // =========================================================================
-    //  Mapeado de Huesos por Slot (IMPORTANTE: No cambiar los Strings)
+    //  Arreglos de huesos (Mapeo exacto a Blockbench)
     // =========================================================================
 
-    /** Casco */
-    @Override public String[] getHelmetBones() {
+    @Override
+    public String[] getHelmetBones() {
         return new String[]{ "armorHelmet" };
     }
 
-    /** Antenas / Adornos de cabeza */
+    /** Huesos para las antenas. */
     public String[] getFeelerBones() {
         return new String[]{ "band", "feeler", "feeler2", "brow", "brow2", "brow3", "brow4" };
     }
 
-    /** Armadura de Pecho / Hombros */
-    @Override public String[] getChestBones() {
+    @Override
+    public String[] getChestBones() {
         return new String[]{ "armorShoulderR", "armorShoulderL", "armorChest", "armorBoobs" };
     }
 
-    /** Detalles del Torso */
-    @Override public String[] getUpperFleshBones() {
+    @Override
+    public String[] getUpperFleshBones() {
         return new String[]{ "boobsFlesh", "upperBodyL", "upperBodyR" };
     }
 
-    /** Pantalones / Cadera */
-    @Override public String[] getLowerArmorBones() {
+    @Override
+    public String[] getLowerArmorBones() {
         return new String[]{
                 "armorBootyR", "armorBootyL",
-                "armorPantsLowL", "armorPantsLowR",
+                "armorPantsLowL", "armorPantsLowR", "armorPantsLowR",
                 "armorPantsUpR", "armorPantsUpL", "armorHip"
         };
     }
 
-    /** Detalles de Piernas y Pelvis */
-    @Override public String[] getLowerFleshBones() {
+    @Override
+    public String[] getLowerFleshBones() {
         return new String[]{ "sideL", "sideR", "fleshL", "fleshR", "vagina", "curvesL", "curvesR", "kneeL", "kneeR" };
     }
 
-    /** Calzado */
-    @Override public String[] getShoeBones() {
+    @Override
+    public String[] getShoeBones() {
         return new String[]{ "armorShoesL", "armorShoesR" };
     }
 }

@@ -1,54 +1,51 @@
 package com.trolmastercard.sexmod.client.renderer;
 
 import com.trolmastercard.sexmod.entity.BeeNpcEntity;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import software.bernie.geckolib.model.GeoModel;
 
 import java.util.HashSet;
 
 /**
- * BeeBodyRenderer (dt) - Ported from 1.12.2 to 1.20.1.
+ * BeeBodyRenderer — Portado a 1.20.1 / GeckoLib 4 y enmascarado (SFW).
  *
- * Full-body {@link BaseNpcRenderer} for the Bee NPC.
- * Overrides the NSFW hidden-bone set to censor "leaf7" and "leaf8"
- * (the bee's leaf-clothing bones) in addition to the standard
- * explicit body-part bones.
- *
- * Hidden bones: "boobs", "booty", "vagina", "fuckhole", "leaf7", "leaf8"
- *
- * 1.12.2 - 1.20.1:
- *   - {@code class dt extends d_} - {@code class BeeBodyRenderer extends BaseNpcRenderer<BeeNpcEntity>}
- *   - Inner anonymous {@code HashSet} - named inner class {@link HiddenBoneSet}
- *   - {@code public HashSet<String> a()} - {@link #getExtraHiddenBones()}
- *     (called from BaseNpcRenderer during frame setup)
+ * Renderizador de cuerpo completo para el NPC Bee.
+ * Sobreescribe el conjunto de huesos ocultos para apagar ciertos elementos de la
+ * malla base ("leaf7" y "leaf8", además de elementos anatómicos) para
+ * evitar recortes visuales con el modelo principal.
  */
 public class BeeBodyRenderer extends BaseNpcRenderer<BeeNpcEntity> {
 
-    public BeeBodyRenderer(GeoModel<BeeNpcEntity> model) {
-        super(model);
+    // Constructor actualizado para 1.20.1 exigiendo el Context del RenderProvider
+    public BeeBodyRenderer(EntityRendererProvider.Context context, GeoModel<BeeNpcEntity> model) {
+        super(context, model, 0.5f); // 0.5f es el tamaño de la sombra por defecto
     }
 
     /**
-     * Returns the set of bones that should always be invisible for this renderer,
-     * regardless of the entity's clothing state.
-     *
-     * Original: {@code public HashSet<String> a()} returning {@code new a()} inner class.
+     * Retorna el conjunto de huesos que siempre deben ser invisibles para este renderizador,
+     * independientemente del estado de la ropa de la entidad.
      */
-    @Override
+    // NOTA: Si en BaseNpcRenderer este método se llama diferente, asegúrate de unificar el nombre.
+    // Por ahora lo dejamos como getExtraHiddenBones para respetar tu lógica original.
     public HashSet<String> getExtraHiddenBones() {
         return new HiddenBoneSet();
     }
 
     // -------------------------------------------------------------------------
-    //  Hidden-bone definitions
+    //  Definición de huesos ocultos (Mapeo directo a Blockbench)
     // -------------------------------------------------------------------------
 
-    /** Bones that are always culled from the Bee NPC's body render. */
+    /** * Huesos que son descartados del renderizado del cuerpo de Bee.
+     * Los nombres deben coincidir exactamente con el archivo .geo.json.
+     */
     private static class HiddenBoneSet extends HashSet<String> {
         HiddenBoneSet() {
+            // Elementos de la malla anatómica base
             add("boobs");
             add("booty");
             add("vagina");
             add("fuckhole");
+            // Elementos de ropa / hojas
             add("leaf7");
             add("leaf8");
         }

@@ -1,21 +1,18 @@
 package com.trolmastercard.sexmod.client.renderer;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import software.bernie.geckolib.model.GeoModel;
 
 /**
- * Ported from dn.java (1.12.2 - 1.20.1)
- * Minimal BaseNpcRenderer wrapper for the "fz" entity type.
- *
- * Original: {@code class dn extends d_<fz>}
- * TODO: replace {@code BaseNpcEntity} with the actual fz entity class once identified.
+ * FzEntityRenderer — Portado a 1.20.1.
+ * * Renderizador genérico para la entidad ofuscada "fz".
+ * * TODO: Cambiar 'T' por la clase final (ej: SlimeGirlEntity) cuando descubras quién es.
  */
-public class FzEntityRenderer extends BaseNpcRenderer<BaseNpcEntity> {
+public class FzEntityRenderer<T extends BaseNpcEntity> extends BaseNpcRenderer<T> {
 
-    public FzEntityRenderer(EntityRendererProvider.Context context,
-                              GeoModel<BaseNpcEntity> model,
-                              double shadowRadius) {
+    public FzEntityRenderer(EntityRendererProvider.Context context, GeoModel<T> model, float shadowRadius) {
+        // Corrección vital: En 1.20.1 y GeckoLib 4, shadowRadius SIEMPRE es float.
         super(context, model, shadowRadius);
     }
 }

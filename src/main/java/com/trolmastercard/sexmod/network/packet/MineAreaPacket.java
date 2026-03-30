@@ -1,53 +1,25 @@
 package com.trolmastercard.sexmod.network.packet;
 
+import com.trolmastercard.sexmod.network.ModNetwork;
+import com.trolmastercard.sexmod.tribe.TribeManager;
+import com.trolmastercard.sexmod.tribe.TribeTask;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.network.PacketDistributor;
 
 import java.util.HashSet;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * MineAreaPacket - ported from e6.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * CLIENT - SERVER. Requests that the player's tribe begin mining a 3-30 column
- * of blocks in the direction the player is facing when they right-click with the
- * staff/wand on a block.
- *
- * Server handler:
- *   1. Verifies the sender has an owned tribe via TribeManager.
- *   2. Checks that enough beds exist for the tribe size (i.e. beds - tribe_size/2).
- *   3. Builds the mining block set (3 wide - 30 deep - 3 tall).
- *   4. Validates none of the blocks have negative hardness (bedrock).
- *   5. Creates a {@link TribeTask} with mode MINE and registers it.
- *   6. Sends a {@link TribeHighlightPacket} back to the client to highlight
- *      the mined column.
- *
- * 1.12.2 - 1.20.1 migrations:
- *   - IMessage/IMessageHandler - FriendlyByteBuf + handle(Supplier<NetworkEvent.Context>)
- *   - ByteBufUtils.readUTF8String - buf.readUtf
- *   - EnumFacing.func_176739_a(str) - Direction.byName(str)
- *   - EnumFacing.func_176730_m() - direction.getAxis()
- *   - blockPos.func_177973_b - blockPos.relative(dir)
- *   - blockPos.func_177984_a - blockPos.above()
- *   - blockPos.func_177971_a - blockPos.relative(offset, n)
- *   - Vec3i.func_177958_n/o/p - getX/getY/getZ
- *   - world.func_180495_p(pos) - level.getBlockState(pos)
- *   - IBlockState.func_177230_c().func_176195_g - block.defaultDestroyTime()
- *   - FMLCommonHandler.getMinecraftServerInstance().func_152344_a - server.execute()
- *   - entityPlayerMP.func_145747_a - player.sendSystemMessage
- *   - entityPlayerMP.func_146105_b - player.displayClientMessage
- *   - ge.b.sendTo(packet, player) - ModNetwork.CHANNEL.send(PLAYER, packet)
- *   - h6 - TribeHighlightPacket
- *   - ax.a(uuid) - TribeManager.getTribeIdFor(uuid)
- *   - ax.h(tribeId) - TribeManager.getMemberCount(tribeId)
- *   - ax.j(tribeId) - TribeManager.getBedList(tribeId)
- *   - ax.b(uuid, task) - TribeManager.assignTask(uuid, task)
- *   - bs.a.MINE - TribeTask.Mode.MINE
+ * MineAreaPacket — Portado a 1.20.1.
+ * * CLIENTE -> SERVIDOR.
+ * * Ordena a la tribu minar una columna de 3x30 bloques en la dirección mirada.
  */
 public class MineAreaPacket {
 
@@ -59,31 +31,31 @@ public class MineAreaPacket {
         this.facing = facing;
     }
 
-    // -- Serialisation ----------------------------------------------------------
+    // ── Serialización (Optimizada 1.20.1) ────────────────────────────────────
 
     public static void encode(MineAreaPacket msg, FriendlyByteBuf buf) {
-        buf.writeInt(msg.origin.getX());
-        buf.writeInt(msg.origin.getY());
-        buf.writeInt(msg.origin.getZ());
-        buf.writeUtf(msg.facing.getName());
+        buf.writeBlockPos(msg.origin);
+        buf.writeEnum(msg.facing);
     }
 
     public static MineAreaPacket decode(FriendlyByteBuf buf) {
-        BlockPos pos = new BlockPos(buf.readInt(), buf.readInt(), buf.readInt());
-        Direction dir = Direction.byName(buf.readUtf());
-        if (dir == null) dir = Direction.NORTH;
-        return new MineAreaPacket(pos, dir);
+        return new MineAreaPacket(
+                buf.readBlockPos(),
+                buf.readEnum(Direction.class)
+        );
     }
 
-    // -- Handler ----------------------------------------------------------------
+    // ── Manejador ────────────────────────────────────────────────────────────
 
     public static void handle(MineAreaPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
+
         if (!ctx.getDirection().getReceptionSide().isServer()) {
-            System.out.println("received an invalid Message @MineArea :(");
+            System.out.println("[SexMod] Error: MineAreaPacket recibido en el lado equivocado.");
             ctx.setPacketHandled(true);
             return;
         }
+
         ctx.enqueueWork(() -> {
             ServerPlayer player = ctx.getSender();
             if (player == null) return;
@@ -92,78 +64,67 @@ public class MineAreaPacket {
             if (tribeId == null) return;
 
             int memberCount = TribeManager.getMemberCount(tribeId);
-            int bedCount    = TribeManager.getBedList(tribeId).size() / 2;
+            int bedCount = TribeManager.getBedList(tribeId).size() / 2;
+
             if (memberCount > bedCount) {
-                player.sendSystemMessage(Component.literal(
-                        "\u00a7cYour Tribe will only work for you, if \u00a7ceveryone\u00a7f of them has a \u00a7cbed"));
-                player.sendSystemMessage(Component.literal(
-                        "\u00a7e" + bedCount + "/" + memberCount + " Beds"));
+                player.sendSystemMessage(Component.literal("Your Tribe will only work for you, if everyone of them has a bed")
+                        .withStyle(ChatFormatting.RED));
+                player.sendSystemMessage(Component.literal(bedCount + "/" + memberCount + " Beds")
+                        .withStyle(ChatFormatting.YELLOW));
                 return;
             }
 
             HashSet<BlockPos> blocks = buildMiningArea(msg.origin, msg.facing);
 
-            // Validate - no bedrock-level hardness
+            // Validar que no haya Bedrock (dureza < 0)
             for (BlockPos pos : blocks) {
-                var blockState = player.level.getBlockState(pos);
-                if (blockState.getDestroySpeed(player.level, pos) < 0.0F) {
+                var blockState = player.level().getBlockState(pos);
+                if (blockState.getDestroySpeed(player.level(), pos) < 0.0F) {
                     player.displayClientMessage(
-                            Component.literal("This area contains Bedrock and cannot be mined"), true);
+                            Component.literal("This area contains Bedrock and cannot be mined").withStyle(ChatFormatting.RED), true);
                     return;
                 }
             }
 
+            // Asignar tarea y enviar resaltado al cliente
             TribeTask task = new TribeTask(msg.origin, TribeTask.Mode.MINE, blocks, msg.facing);
             TribeManager.assignTask(tribeId, task);
 
             ModNetwork.CHANNEL.send(
-                    net.minecraftforge.network.PacketDistributor.PLAYER.with(() -> player),
-                    new TribeHighlightPacket(blocks, true));
+                    PacketDistributor.PLAYER.with(() -> player),
+                    new TribeHighlightPacket(blocks, true)
+            );
         });
         ctx.setPacketHandled(true);
     }
 
-    // -- Mining area builder ----------------------------------------------------
+    // ── Constructor de Área de Minería ───────────────────────────────────────
 
     /**
-     * Builds a HashSet of BlockPos for a 3-wide - 30-deep - 3-tall column
-     * extending from {@code origin} in the given {@code direction}.
-     *
-     * Side axis is the axis perpendicular to the facing direction on the
-     * horizontal plane (rotated 90-): sideAxis = (z, 0, -x) for facing (x, 0, z).
+     * Construye un HashSet de BlockPos para una columna de 3 de ancho × 30 de largo × 3 de alto.
      */
     static HashSet<BlockPos> buildMiningArea(BlockPos origin, Direction facing) {
         HashSet<BlockPos> set = new HashSet<>();
         BlockPos cursor = origin;
-        Direction sideDir = getSideDirection(facing);
+
+        // Magia de la 1.20.1: getClockWise() nos da la dirección perpendicular al instante
+        Direction sideDir = facing.getClockWise();
 
         for (int depth = 0; depth < 30; depth++) {
-            // Centre column + one to each side
-            BlockPos left  = cursor.relative(sideDir, -1);
-            BlockPos right = cursor.relative(sideDir,  1);
+            // Columna central + una a cada lado
+            BlockPos left = cursor.relative(sideDir.getOpposite()); // O usar getCounterClockWise()
+            BlockPos right = cursor.relative(sideDir);
 
-            // Add 3 heights at each lateral position
+            // Añadir 3 bloques de altura en cada posición lateral
             for (BlockPos bp : new BlockPos[]{ left, cursor, right }) {
                 set.add(bp);
                 set.add(bp.above());
                 set.add(bp.above(2));
             }
 
-            cursor = cursor.relative(facing.getOpposite().getAxis() == net.minecraft.core.Direction.Axis.X
-                    ? facing : facing);
+            // Avanzar el cursor hacia adelante
+            cursor = cursor.relative(facing);
         }
         return set;
-    }
-
-    /** Returns the horizontal perpendicular direction to the given facing direction. */
-    private static Direction getSideDirection(Direction facing) {
-        var axis = facing.getAxis();
-        // Rotate 90- around Y: (x,0,z) - (z, 0, -x)
-        int sx = facing.getStepZ();
-        int sz = -facing.getStepX();
-        if (sx > 0) return Direction.EAST;
-        if (sx < 0) return Direction.WEST;
-        if (sz > 0) return Direction.SOUTH;
-        return Direction.NORTH;
     }
 }

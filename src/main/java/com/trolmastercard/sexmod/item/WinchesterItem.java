@@ -1,53 +1,61 @@
-package com.trolmastercard.sexmod.item;
+package com.trolmastercard.sexmod.item; // Ajusta a tu paquete de ítems
 
+import com.trolmastercard.sexmod.client.renderer.WinchesterRenderer; // Asegúrate de tener esta clase
+import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.world.item.Item;
+import net.minecraftforge.client.extensions.common.IClientItemExtensions;
 import software.bernie.geckolib.animatable.GeoItem;
 import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
 import software.bernie.geckolib.core.animation.AnimatableManager;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
+import java.util.function.Consumer;
+
 /**
- * WinchesterItem - ported from aj.class (Fapcraft 1.12.2 v1.1) to 1.20.1 / GeckoLib 4.
- *
- * Animated item (Winchester prop). Has no active animations but implements
- * {@link GeoItem} so GeckoLib can render it via {@link WinchesterRenderer}.
- *
- * Registration (in your {@code ModItems}):
- * <pre>
- *   public static final RegistryObject&lt;WinchesterItem&gt; WINCHESTER =
- *       ITEMS.register("winchester", WinchesterItem::new);
- * </pre>
- *
- * In 1.12.2:
- *   - {@code setRegistryName} and {@code setUnlocalizedName} were called manually.
- *   - {@code registerControllers} was empty.
- *   - Item was a singleton ({@code aj.b = new aj()}).
- *
- * In 1.20.1:
- *   - Registration is handled by the {@code DeferredRegister} system.
- *   - {@code IAnimatable} - {@link GeoItem}.
- *   - {@code AnimationFactory} - {@link AnimatableInstanceCache} via {@link GeckoLibUtil}.
- *   - No need to register on MinecraftForge.EVENT_BUS - use EventBusSubscriber if needed.
+ * WinchesterItem — Portado a 1.20.1 / GeckoLib 4.
+ * * Ítem animado (Prop de Winchester). No tiene animaciones activas por sí solo,
+ * * pero implementa GeoItem para que GeckoLib pueda renderizar su modelo 3D.
  */
 public class WinchesterItem extends Item implements GeoItem {
 
     private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
 
-    public WinchesterItem() {
-        super(new Item.Properties());
+    // 🚨 1.20.1: Recibimos Properties para poder configurar el stack y la pestaña creativa en el registro
+    public WinchesterItem(Properties properties) {
+        super(properties);
     }
 
-    // =========================================================================
-    //  GeoItem / GeckoLib 4
-    // =========================================================================
+    // ── GeckoLib 4 (Lógica y Animación) ──────────────────────────────────────
 
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
-        // No animations for this prop item
+        // Sin animaciones activas por defecto para este prop
     }
 
     @Override
     public AnimatableInstanceCache getAnimatableInstanceCache() {
-        return cache;
+        return this.cache;
+    }
+
+    // ── Enlace del Renderizador Cliente (¡Vital para 1.20.1!) ────────────────
+
+    /**
+     * En GeckoLib 4, los ítems DEBEN registrar su BlockEntityWithoutLevelRenderer (BEWLR)
+     * a través de este método para que el juego sepa que debe usar el modelo 3D
+     * en la mano, en el inventario y tirado en el suelo.
+     */
+    @Override
+    public void initializeClient(Consumer<IClientItemExtensions> consumer) {
+        consumer.accept(new IClientItemExtensions() {
+            private WinchesterRenderer renderer;
+
+            @Override
+            public BlockEntityWithoutLevelRenderer getCustomRenderer() {
+                if (this.renderer == null) {
+                    this.renderer = new WinchesterRenderer();
+                }
+                return this.renderer;
+            }
+        });
     }
 }

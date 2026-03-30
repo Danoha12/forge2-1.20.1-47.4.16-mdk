@@ -1,20 +1,19 @@
 package com.trolmastercard.sexmod.network.packet;
-import com.trolmastercard.sexmod.NpcInventoryEntity;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
+import com.trolmastercard.sexmod.entity.NpcInventoryEntity;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.network.NetworkEvent;
 
-import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * Ported from dq.java (1.12.2 - 1.20.1)
- * Packet: client - server - instructs a cat-type NPC (eb subclass) identified by UUID
- * to call its j() method (throwAwayItem / drop held item).
- *
- * 1.12.2 used IMessage/IMessageHandler; 1.20.1 uses FriendlyByteBuf encode/decode + handle().
+ * CatThrowAwayItemPacket — Portado a 1.20.1.
+ * * CLIENTE → SERVIDOR.
+ * * Hace que todos los NPCs vinculados al UUID tiren el ítem que sostienen.
+ * * Se activa principalmente con las animaciones de Luna/Cat.
  */
 public class CatThrowAwayItemPacket {
 
@@ -24,37 +23,41 @@ public class CatThrowAwayItemPacket {
         this.ownerUUID = ownerUUID;
     }
 
-    // -- Serialization ---------------------------------------------------------
+    // ── Codec (Optimizado con UUID nativo) ───────────────────────────────────
+
+    public static void encode(CatThrowAwayItemPacket msg, FriendlyByteBuf buf) {
+        // En 1.20.1 es mejor usar writeUUID que convertirlo a String
+        buf.writeUUID(msg.ownerUUID);
+    }
 
     public static CatThrowAwayItemPacket decode(FriendlyByteBuf buf) {
-        return new CatThrowAwayItemPacket(UUID.fromString(buf.readUtf()));
+        return new CatThrowAwayItemPacket(buf.readUUID());
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(ownerUUID.toString());
-    }
+    // ── Manejador (Handler) ──────────────────────────────────────────────────
 
-    // -- Handler ---------------------------------------------------------------
-
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
+    public static void handle(CatThrowAwayItemPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
-        ctx.enqueueWork(() -> {
-            // Server side: find all BaseNpcEntity instances owned by the UUID
-            // and cast to NpcInventoryEntity to call throwAwayItem()
-            net.minecraft.server.MinecraftServer server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
-            if (server == null) return;
 
-            // Iterate all loaded levels
-            server.getAllLevels().forEach(level -> {
-                ArrayList<BaseNpcEntity> list = BaseNpcEntity.getAllByOwner(level, ownerUUID);
-                for (BaseNpcEntity npc : list) {
-                    if (level.isClientSide()) continue;
-                    if (npc instanceof NpcInventoryEntity inventoryNpc) {
-                        inventoryNpc.throwAwayItem(); // was eb.j()
-                    }
+        // Validamos que el paquete llegue al servidor
+        if (!ctx.getDirection().getReceptionSide().isServer()) {
+            return;
+        }
+
+        ctx.enqueueWork(() -> {
+            // Buscamos todos los NPCs asociados al jugador
+            List<BaseNpcEntity> npcs = BaseNpcEntity.getByOwner(msg.ownerUUID);
+
+            for (BaseNpcEntity npc : npcs) {
+                // Solo procesamos en el servidor y si es una entidad con inventario
+                if (!npc.level().isClientSide() && npc instanceof NpcInventoryEntity inventoryNpc) {
+                    // Este método debe estar definido en NpcInventoryEntity
+                    // o en la clase específica del NPC (como CatPlayerKobold)
+                    inventoryNpc.throwAwayCurrentItem();
                 }
-            });
+            }
         });
+
         ctx.setPacketHandled(true);
     }
 }

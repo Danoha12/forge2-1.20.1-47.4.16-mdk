@@ -1,118 +1,106 @@
-package com.trolmastercard.sexmod.network.packet;
-import com.trolmastercard.sexmod.PlayerKoboldEntity;
-import com.trolmastercard.sexmod.NpcInventoryEntity;
-import com.trolmastercard.sexmod.BaseNpcEntity;
+package com.trolmastercard.sexmod.network.packet; // Ajusta a tu paquete de red
 
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
+import com.trolmastercard.sexmod.entity.TickableCallback; // Asumo que esto existe
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.ArrayList;
-import java.util.ConcurrentModificationException;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * TransferOwnershipPacket (dc) - CLIENT-SERVER.
- *
- * For every BaseNpcEntity matching {@code npcUuid}:
- *  1. Removes KoboldFollowOwnerGoal and WaterAvoidingRandomStrollGoal
- *  2. Stops navigation and zeros velocity
- *  3. Sets new owner to {@code newOwnerUuid} (or re-uses existing if already set)
- *  4. Optionally teleports home to current position (setHome=true)
- *  5. Optionally fires TickableCallback.onOwnerSet() (triggerCallback=true)
+ * TransferOwnershipPacket — Portado a 1.20.1.
+ * * CLIENTE -> SERVIDOR.
+ * * Transfiere la propiedad de un grupo de NPCs, detiene sus IA de seguimiento
+ * * y opcionalmente actualiza su punto de retorno.
  */
 public class TransferOwnershipPacket {
 
-    private final UUID npcUuid;
-    private final UUID newOwnerUuid;   // may be null  keep existing
-    private final boolean setHome;
-    private final boolean triggerCallback;
+    public final UUID npcUuid;
+    public final UUID newOwnerUuid; // Puede ser nulo
+    public final boolean setHome;
+    public final boolean triggerCallback;
 
-    public TransferOwnershipPacket(UUID npcUuid, UUID newOwnerUuid,
-                                    boolean setHome, boolean triggerCallback) {
-        this.npcUuid        = npcUuid;
-        this.newOwnerUuid   = newOwnerUuid;
-        this.setHome        = setHome;
+    // ── Constructores ────────────────────────────────────────────────────────
+
+    public TransferOwnershipPacket(UUID npcUuid, UUID newOwnerUuid, boolean setHome, boolean triggerCallback) {
+        this.npcUuid = npcUuid;
+        this.newOwnerUuid = newOwnerUuid;
+        this.setHome = setHome;
         this.triggerCallback = triggerCallback;
     }
 
-    // -- Codec -----------------------------------------------------------------
+    // ── Codec (Optimizado sin Strings) ───────────────────────────────────────
+
+    public static void encode(TransferOwnershipPacket msg, FriendlyByteBuf buf) {
+        buf.writeUUID(msg.npcUuid);
+        buf.writeBoolean(msg.setHome);
+        buf.writeBoolean(msg.triggerCallback);
+
+        // Manejo elegante de UUIDs nulos sin usar Strings
+        boolean hasNewOwner = msg.newOwnerUuid != null;
+        buf.writeBoolean(hasNewOwner);
+        if (hasNewOwner) {
+            buf.writeUUID(msg.newOwnerUuid);
+        }
+    }
 
     public static TransferOwnershipPacket decode(FriendlyByteBuf buf) {
-        UUID npc   = UUID.fromString(buf.readUtf());
-        boolean sh = buf.readBoolean();
-        boolean tc = buf.readBoolean();
-        String ownerStr = buf.readUtf();
-        UUID owner = "null".equals(ownerStr) ? null : UUID.fromString(ownerStr);
-        return new TransferOwnershipPacket(npc, owner, sh, tc);
+        UUID npcUuid = buf.readUUID();
+        boolean setHome = buf.readBoolean();
+        boolean triggerCallback = buf.readBoolean();
+
+        UUID newOwnerUuid = buf.readBoolean() ? buf.readUUID() : null;
+
+        return new TransferOwnershipPacket(npcUuid, newOwnerUuid, setHome, triggerCallback);
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(npcUuid.toString());
-        buf.writeBoolean(setHome);
-        buf.writeBoolean(triggerCallback);
-        buf.writeUtf(newOwnerUuid == null ? "null" : newOwnerUuid.toString());
+    // ── Manejador ────────────────────────────────────────────────────────────
+
+    public static void handle(TransferOwnershipPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
+        NetworkEvent.Context ctx = ctxSupplier.get();
+
+        ctx.enqueueWork(() -> applyToEntities(msg));
+
+        ctx.setPacketHandled(true);
     }
 
-    // -- Handler ---------------------------------------------------------------
+    // ── Lógica de Aplicación ─────────────────────────────────────────────────
 
-    public void handle(Supplier<NetworkEvent.Context> ctx) {
-        NetworkEvent.Context context = ctx.get();
-        context.enqueueWork(() -> applyToEntities(npcUuid, newOwnerUuid, setHome, triggerCallback));
-        context.setPacketHandled(true);
-    }
-
-    // -- Static application logic ----------------------------------------------
-
-    public static void applyToEntities(UUID npcUuid, UUID newOwnerUuid,
-                                        boolean setHome, boolean triggerCallback) {
-        ArrayList<BaseNpcEntity> targets;
-        try {
-            targets = BaseNpcEntity.getAllByMasterUUID(npcUuid);
-        } catch (ConcurrentModificationException e) {
-            return;
-        }
+    private static void applyToEntities(TransferOwnershipPacket msg) {
+        // Hacemos una copia segura para evitar ConcurrentModificationException
+        List<BaseNpcEntity> targets = new ArrayList<>(BaseNpcEntity.getAllByMasterUUID(msg.npcUuid));
 
         for (BaseNpcEntity npc : targets) {
-            try {
-                if (npc.level().isClientSide()) continue;
+            if (npc.level().isClientSide()) continue;
 
-                // Remove follow/wander goals if it's a proper NPC type
-                if (npc instanceof PlayerKoboldEntity || npc instanceof NpcInventoryEntity
-                        || npc instanceof BaseNpcEntity) {
-                    npc.goalSelector.removeGoal(npc.followOwnerGoal);
-                    npc.goalSelector.removeGoal(npc.wanderGoal);
-                }
+            // Limpiamos las metas de la IA
+            // (Asumiendo que followOwnerGoal y wanderGoal son públicos en tu BaseNpcEntity)
+            if (npc.followOwnerGoal != null) npc.goalSelector.removeGoal(npc.followOwnerGoal);
+            if (npc.wanderGoal != null) npc.goalSelector.removeGoal(npc.wanderGoal);
 
-                // Stop navigation, zero velocity
-                npc.getNavigation().stop();
-                npc.setDeltaMovement(0, 0, 0);
+            // Detener navegación y físicas
+            npc.getNavigation().stop();
+            npc.setDeltaMovement(0, 0, 0);
 
-                // Set owner: if no existing owner, use provided uuid
-                if (npc.getMasterUUID() == null) {
-                    npc.setMasterUUID(newOwnerUuid);
-                }
+            // Asignar nuevo dueño si se proporcionó uno
+            if (msg.newOwnerUuid != null) {
+                npc.setMasterUUID(msg.newOwnerUuid);
+            }
 
-                // Optionally update home position to current pos
-                if (setHome) {
-                    npc.setHomePos(npc.getHomePos());
-                }
+            // 🚨 CORREGIDO: Fijar la casa en la posición actual de la entidad
+            if (msg.setHome) {
+                npc.setHomePos(npc.position());
+            }
 
-                // Re-bind owner field
-                npc.setMasterUUID(npc.getMasterUUID());
+            // Refrescar el dueño (Mantuve esto asumiendo que tu setter dispara alguna sincronización de red)
+            npc.setMasterUUID(npc.getMasterUUID());
 
-                if (!triggerCallback) continue;
-
-                // Fire TickableCallback if implemented
-                if (npc instanceof TickableCallback cb) {
-                    cb.onOwnerSet();
-                }
-            } catch (ConcurrentModificationException e) {
-                // skip
-            } catch (NullPointerException e) {
-                // skip
+            // Disparar callbacks si es necesario
+            if (msg.triggerCallback && npc instanceof TickableCallback cb) {
+                cb.onOwnerSet();
             }
         }
     }

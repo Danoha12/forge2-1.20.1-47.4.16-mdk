@@ -1,33 +1,46 @@
-package com.trolmastercard.sexmod.util;
+package com.trolmastercard.sexmod.util; // Ajusta a tu paquete de utilidades (o math)
+
+import java.util.Objects;
 
 /**
- * YawPitch - ported from bm.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Immutable pair of (yaw, pitch) in radians.
- *
- * Field mapping:
- *   c = yaw   (float, radians)
- *   a = pitch (float, radians)
- *
- * Static constant b = ZERO = (0, 0).
+ * YawPitch — Portado a 1.20.1.
+ * * Par inmutable de (yaw, pitch) en radianes.
+ * * * * Nota del herrero: Mantenido como 'class' en lugar de 'record' (Java 17)
+ * * para no romper la compatibilidad de acceso directo a los campos públicos (.yaw / .pitch).
  */
 public final class YawPitch {
 
     public static final YawPitch ZERO = new YawPitch(0.0F, 0.0F);
 
-    /** Yaw in radians. Original field: {@code c}. */
+    /** Yaw en radianes. */
     public final float yaw;
 
-    /** Pitch in radians. Original field: {@code a}. */
+    /** Pitch en radianes. */
     public final float pitch;
 
     public YawPitch(float yaw, float pitch) {
-        this.yaw   = yaw;
+        this.yaw = yaw;
         this.pitch = pitch;
     }
 
+    // ── Métodos de Objeto Estándar ───────────────────────────────────────────
+
     @Override
     public String toString() {
-        return "YawPitch{yaw=" + yaw + ", pitch=" + pitch + '}';
+        return "YawPitch{yaw=" + this.yaw + ", pitch=" + this.pitch + "}";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        YawPitch yawPitch = (YawPitch) o;
+        return Float.compare(yawPitch.yaw, this.yaw) == 0 &&
+                Float.compare(yawPitch.pitch, this.pitch) == 0;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(this.yaw, this.pitch);
     }
 }

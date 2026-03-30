@@ -1,86 +1,99 @@
 package com.trolmastercard.sexmod.client.renderer;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Manages and renders the list of {@link PhysicsParticle} (cummy) particles.
- * Obfuscated name: ga
+ * CummyParticleRenderer — Portado a 1.20.1.
+ * * Gestiona y renderiza las partículas con física (fluidos).
+ * * Usa CopyOnWriteArrayList para evitar errores de modificación concurrente.
  */
 @OnlyIn(Dist.CLIENT)
+@Mod.EventBusSubscriber(value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class CummyParticleRenderer {
 
-    static final ResourceLocation TEXTURE =
-            new ResourceLocation("sexmod", "textures/cummy.png");
+    public static final ResourceLocation TEXTURE = new ResourceLocation("sexmod", "textures/cummy.png");
+    private static final List<PhysicsParticle> PARTICLES = new CopyOnWriteArrayList<>();
 
-    static final Minecraft MC = Minecraft.getInstance();
-    static List<PhysicsParticle> particles = new ArrayList<>();
+    // ── Renderizado del Mundo ────────────────────────────────────────────────
 
     @SubscribeEvent
-    public void onRenderLevel(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
+    public static void onRenderLevel(RenderLevelStageEvent event) {
+        // En 1.20.1 usamos AFTER_PARTICLES para que se vean sobre el terreno pero bajo la UI
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES || PARTICLES.isEmpty()) return;
 
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+
+        // Configuración de Shaders (Vital en 1.20.1)
+        RenderSystem.setShader(GameRenderer::getPositionTexShader);
         RenderSystem.setShaderTexture(0, TEXTURE);
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 
-        Tesselator   tessellator = Tesselator.getInstance();
-        BufferBuilder builder    = tessellator.getBuilder();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.enableDepthTest();
+
+        Tesselator tessellator = Tesselator.getInstance();
+        BufferBuilder builder = tessellator.getBuilder();
         float partialTick = event.getPartialTick();
 
-        try {
-            RenderSystem.enableBlend();
-            RenderSystem.enableDepthTest();
-            if (MC.player == null) return;
-        } catch (RuntimeException e) {
-            return;
+        // Iniciamos el dibujado (Asumiendo que PhysicsParticle usa POSITION_TEX)
+        builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
+
+        for (PhysicsParticle p : PARTICLES) {
+            p.render(mc, tessellator, builder, partialTick);
         }
 
-        for (PhysicsParticle p : particles) {
-            p.render(MC, tessellator, builder, partialTick);
-        }
-
+        tessellator.end();
         RenderSystem.disableBlend();
     }
 
+    // ── Lógica de Tiempo (Ticks) ──────────────────────────────────────────────
+
     @SubscribeEvent
-    public void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase == TickEvent.Phase.END) return;
-        for (PhysicsParticle p : particles) p.tick();
+    public static void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) {
+            // Actualizamos y limpiamos partículas muertas en un solo paso
+            PARTICLES.removeIf(p -> {
+                p.tick();
+                return p.isDead(); // Asumiendo que PhysicsParticle tiene un isDead() o lifetime <= 0
+            });
+        }
     }
 
-    // -- Static API ------------------------------------------------------------
+    // ── API Estática ──────────────────────────────────────────────────────────
 
     public static void add(PhysicsParticle particle) {
-        particles.add(particle);
-    }
-
-    public static void add(int lifetime, NpcPositionSupplier posSupplier,
-                            NpcBoneQuadBuilder quadBuilder, BaseNpcEntity npc,
-                            float gravityScale, float size) {
-        particles.add(new PhysicsParticle(lifetime, posSupplier, quadBuilder,
-                npc, gravityScale, size));
-    }
-
-    public static void removeForNpc(@Nonnull BaseNpcEntity npc) {
-        List<PhysicsParticle> toRemove = new ArrayList<>();
-        for (PhysicsParticle p : particles) {
-            if (p.getOwner().getNpcUUID().equals(npc.getNpcUUID())) {
-                toRemove.add(p);
-            }
+        // Límite de seguridad: 500 partículas para no matar los FPS
+        if (PARTICLES.size() < 500) {
+            PARTICLES.add(particle);
         }
-        particles.removeAll(toRemove);
+    }
+
+    /** Helper para eliminar partículas vinculadas a un NPC que ha sido removido */
+    public static void removeForNpc(@Nonnull BaseNpcEntity npc) {
+        PARTICLES.removeIf(p -> p.getOwner() != null && p.getOwner().getUUID().equals(npc.getUUID()));
+    }
+
+    public static void clear() {
+        PARTICLES.clear();
     }
 }

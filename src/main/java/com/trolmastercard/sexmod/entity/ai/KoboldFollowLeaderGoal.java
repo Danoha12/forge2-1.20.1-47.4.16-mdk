@@ -1,101 +1,97 @@
 package com.trolmastercard.sexmod.entity.ai;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
-import net.minecraft.world.entity.Entity;
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 
 /**
- * KoboldFollowLeaderGoal - ported from h.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * NPC goal that makes a kobold follow the tribe leader (the entity tracked
- * by its goal system). Extends NpcGoalBase which provides:
- *   - {@code d} = the NPC entity (BaseNpcEntity)
- *   - {@code a} = the target leader entity
- *   - {@code c} = the path navigator
- *   - {@code f} = current goal state (NpcGoalBase.GoalState)
- *
- * Speed scales up the further the NPC is from its leader (capped at 0.7).
- *
- * 1.12.2 - 1.20.1 migrations:
- *   - EntityAIBase - Goal (handled in NpcGoalBase)
- *   - d.func_70032_d(entity) - d.distanceTo(entity)
- *   - c.func_111269_d() - c.getTargetDistanceSqr() or navigation dist
- *   - c.func_75499_g() - c.stop()
- *   - c.func_75497_a(entity, speed) - c.moveTo(entity, speed)
- *   - d.field_70747_aH = speed - d.getAttribute(MOVEMENT_SPEED).setBaseValue(speed)
- *   - NpcGoalBase.a.FOLLOW / IDLE - NpcGoalBase.GoalState.FOLLOW / IDLE
+ * KoboldFollowLeaderGoal — Portado a 1.20.1.
+ * * Objetivo de IA que hace que los Kobolds sigan al líder de su tribu.
+ * * La velocidad escala dinámicamente: entre más lejos esté del líder, más rápido correrá.
+ * * Incluye un "periodo de gracia" (closeTimer) para evitar que el NPC se detenga abruptamente.
  */
 public class KoboldFollowLeaderGoal extends NpcGoalBase {
 
-    /** Ticks the NPC has been close to the leader while in FOLLOW state. */
     private int closeTimer = 0;
-    /** Unused timer, mirrors original 'i' field. */
-    private int idleTimer  = 0;
 
     public KoboldFollowLeaderGoal(BaseNpcEntity npc) {
         super(npc);
-    }
-
-    // -- NpcGoalBase contract ----------------------------------------------------
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        // Minimum movement speed while following
-        this.d.setBaseMovementSpeed(0.02F);
+        // Marcamos que este objetivo ocupa los slots de MOVIMIENTO y MIRADA
+        this.setFlags(java.util.EnumSet.of(Flag.MOVE, Flag.LOOK));
     }
 
     @Override
-    protected NpcGoalBase.GoalState computeDesiredState() {
-        float dist = this.d.distanceTo((Entity) this.a);
+    public void start() {
+        super.start();
+        // Inicializamos con una velocidad de acecho mínima
+        this.d.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.02D);
+    }
 
+    @Override
+    protected GoalState computeDesiredState() {
+        if (this.a == null || !this.a.isAlive()) return GoalState.IDLE;
+
+        float dist = this.d.distanceTo((LivingEntity) this.a);
         boolean tooFar = dist > 5.0F;
 
-        // If the NPC has no sex partner and is close, allow a brief linger period
-        // before transitioning back to IDLE (mirrors original j/closeTimer logic).
+        // Lógica de Linger: Si no tiene pareja y está cerca, se queda un rato antes de entrar en IDLE
         if (this.d.getSexPartner() == null) {
-            if (!tooFar && this.f == NpcGoalBase.GoalState.FOLLOW) {
-                if (++this.closeTimer > 60) {
-                    tooFar = false;   // force IDLE transition
+            if (!tooFar && this.f == GoalState.FOLLOW) {
+                if (++this.closeTimer > 60) { // ~3 segundos de espera
+                    tooFar = false;
                     this.closeTimer = 0;
                 } else {
-                    tooFar = true;    // keep following for a bit
+                    tooFar = true;
                 }
             }
         }
 
-        return tooFar ? NpcGoalBase.GoalState.FOLLOW : NpcGoalBase.GoalState.IDLE;
+        return tooFar ? GoalState.FOLLOW : GoalState.IDLE;
     }
 
     @Override
-    protected void onStateChanged(NpcGoalBase.GoalState newState) {
+    protected void onStateChanged(GoalState newState) {
+        if (this.a == null) return;
+
         switch (newState) {
             case FOLLOW -> {
-                double dist = this.d.distanceTo((Entity) this.a);
-                if (this.c.getDistToTarget() > dist) {
+                double dist = this.d.distanceTo((LivingEntity) this.a);
+                // Si el navegador está intentando ir más lejos que la posición del líder, reiniciamos
+                if (this.c.getTargetDistanceSqr() > dist * dist) {
                     this.c.stop();
-                    this.c.moveTo((Entity) this.a, 0.5D);
-                } else {
-                    onStateChanged(NpcGoalBase.GoalState.IDLE);
                 }
-                this.idleTimer = 300;
-                updateSpeed();
+
+                double speed = updateSpeed();
+                this.c.moveTo((LivingEntity) this.a, speed);
             }
-            case IDLE -> updateSpeed();
+            case IDLE -> {
+                this.c.stop();
+                this.d.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.1D); // Velocidad base
+            }
         }
     }
 
-    // -- Speed scaling -----------------------------------------------------------
-
     /**
-     * Scales movement speed with distance: base 0.02, up to 0.7 at long range.
-     *
-     * Original formula: speed = 0.02 + min(0.7, floor(dist/3) * 0.05)
+     * Calcula la velocidad basándose en la distancia.
+     * Fórmula: 0.02 base + incrementos de 0.05 por cada 3 bloques, tope de 0.7.
      */
     private double updateSpeed() {
-        float dist  = this.d.distanceTo((Entity) this.a);
+        if (this.a == null) return 0.1D;
+
+        float dist = this.d.distanceTo((LivingEntity) this.a);
         double extra = Math.min(0.7D, Math.floor(dist / 3.0F) * 0.05D);
-        float speed  = (float) (0.02F + extra);
-        this.d.setBaseMovementSpeed(speed);
-        return speed;
+        double finalSpeed = 0.02D + extra;
+
+        this.d.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(finalSpeed);
+        return finalSpeed;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        // Actualizamos la velocidad dinámicamente mientras lo seguimos
+        if (this.f == GoalState.FOLLOW && this.d.tickCount % 10 == 0) {
+            updateSpeed();
+        }
     }
 }

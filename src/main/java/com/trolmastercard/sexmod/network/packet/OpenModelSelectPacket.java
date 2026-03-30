@@ -1,126 +1,107 @@
-package com.trolmastercard.sexmod.network.packet;
+package com.trolmastercard.sexmod.network.packet; // Ajusta a tu paquete de red
 
 import com.trolmastercard.sexmod.client.screen.NpcTypeSelectScreen;
 import com.trolmastercard.sexmod.entity.NpcType;
+import com.trolmastercard.sexmod.network.ModNetwork;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.network.PacketDistributor;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * OpenModelSelectPacket - ported from bd.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Bidirectional packet:
- *
- * SERVER - CLIENT: opens the {@link NpcTypeSelectScreen} on the client with
- *   per-type model overrides (NBT key {@code sexmod:GirlSpecific<type>}).
- *
- * CLIENT - SERVER: the server reads the player's per-type model preferences
- *   from entity persistent data and sends them back.
- *
- * Field mapping:
- *   a = modelOverrides  (HashMap&lt;NpcType, String&gt;)
- *   b = player          (only used server-side during encode; not sent)
- *   c = valid
- *
- * In 1.12.2:
- *   - {@code ByteBufUtils.readUTF8String/writeUTF8String} - {@code buf.readUtf()/writeUtf()}
- *   - {@code minecraft.func_152344_a(r)} - {@code Minecraft.getInstance().execute(r)}
- *   - {@code minecraft.func_147108_a(screen)} - {@code minecraft.setScreen(screen)}
- *   - {@code player.getEntityData().func_74779_i(key)} - {@code player.getPersistentData().getString(key)}
+ * OpenModelSelectPacket — Portado a 1.20.1.
+ * * Paquete Bidireccional:
+ * * C -> S: Pide al servidor las preferencias guardadas en el NBT del jugador.
+ * * S -> C: Envía el mapa de modelos y le ordena al cliente abrir la interfaz.
  */
 public class OpenModelSelectPacket {
 
-    /** NBT key prefix for per-type model overrides. */
     public static final String NBT_PREFIX = "sexmod:GirlSpecific";
 
     private final HashMap<NpcType, String> modelOverrides;
-    private final Player                   player;          // server-side only
-    private final boolean                  valid;
 
-    // =========================================================================
-    //  Constructors
-    // =========================================================================
+    // ── Constructores ────────────────────────────────────────────────────────
 
-    /** Client - Server constructor (no payload, just a request). */
-    public OpenModelSelectPacket(Player serverPlayer) {
+    /** Constructor C -> S: El cliente envía un paquete vacío solo para pedir datos */
+    public OpenModelSelectPacket() {
         this.modelOverrides = new HashMap<>();
-        this.player         = serverPlayer;
-        this.valid          = true;
     }
 
-    /** Server - Client constructor with pre-built overrides map. */
-    private OpenModelSelectPacket(HashMap<NpcType, String> overrides) {
+    /** Constructor S -> C: El servidor envía los datos encontrados en el NBT */
+    public OpenModelSelectPacket(HashMap<NpcType, String> overrides) {
         this.modelOverrides = overrides;
-        this.player         = null;
-        this.valid          = true;
     }
 
-    // =========================================================================
-    //  Codec
-    // =========================================================================
+    // ── Codec (Serialización pura, sin lógica de entidades) ──────────────────
+
+    public static void encode(OpenModelSelectPacket msg, FriendlyByteBuf buf) {
+        buf.writeInt(msg.modelOverrides.size());
+        for (Map.Entry<NpcType, String> entry : msg.modelOverrides.entrySet()) {
+            // 1.20.1: Escribimos el Enum de forma nativa
+            buf.writeEnum(entry.getKey());
+            buf.writeUtf(entry.getValue());
+        }
+    }
 
     public static OpenModelSelectPacket decode(FriendlyByteBuf buf) {
         int count = buf.readInt();
         HashMap<NpcType, String> map = new HashMap<>();
         for (int i = 0; i < count; i++) {
-            NpcType type  = NpcType.valueOf(buf.readUtf());
-            String  model = buf.readUtf();
+            NpcType type = buf.readEnum(NpcType.class);
+            String model = buf.readUtf();
             map.put(type, model);
         }
         return new OpenModelSelectPacket(map);
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        // Build the map from the player's NBT when encoding (server-side)
-        HashMap<NpcType, String> toSend = new HashMap<>();
-        if (player != null) {
-            for (NpcType type : NpcType.values()) {
-                if (!type.hasSpecifics) continue;
-                String val = player.getPersistentData().getString(NBT_PREFIX + type);
-                if (!val.isEmpty()) toSend.put(type, val);
-            }
-        } else {
-            toSend.putAll(modelOverrides);
-        }
+    // ── Manejador Bidireccional ──────────────────────────────────────────────
 
-        buf.writeInt(toSend.size());
-        for (Map.Entry<NpcType, String> entry : toSend.entrySet()) {
-            buf.writeUtf(entry.getKey().toString());
-            buf.writeUtf(entry.getValue());
-        }
-    }
-
-    // =========================================================================
-    //  Handler
-    // =========================================================================
-
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
+    public static void handle(OpenModelSelectPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
-        ctx.enqueueWork(() -> {
-            if (!valid) return;
 
-            if (ctx.getSender() != null) {
-                // This packet is server-client only
-                System.out.println("received OpenModelSelect on wrong side");
-                return;
-            }
+        // 1. LÓGICA DEL SERVIDOR (El cliente nos pide sus datos)
+        if (ctx.getDirection().getReceptionSide().isServer()) {
+            ctx.enqueueWork(() -> {
+                ServerPlayer player = ctx.getSender();
+                if (player == null) return;
 
-            // CLIENT side: open the screen
-            openScreenOnClient(modelOverrides);
-        });
+                HashMap<NpcType, String> toSend = new HashMap<>();
+                for (NpcType type : NpcType.values()) {
+                    if (!type.hasSpecifics) continue;
+
+                    // Leemos el NBT persistente del jugador
+                    String val = player.getPersistentData().getString(NBT_PREFIX + type.name());
+                    if (!val.isEmpty()) {
+                        toSend.put(type, val);
+                    }
+                }
+
+                // Disparamos el paquete de vuelta hacia el cliente con los datos
+                ModNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenModelSelectPacket(toSend));
+            });
+        }
+        // 2. LÓGICA DEL CLIENTE (El servidor nos manda los datos listos)
+        else {
+            ctx.enqueueWork(() -> {
+                openScreenOnClient(msg.modelOverrides);
+            });
+        }
         ctx.setPacketHandled(true);
     }
+
+    // ── Apertura de GUI aislada ──────────────────────────────────────────────
 
     @OnlyIn(Dist.CLIENT)
     private static void openScreenOnClient(HashMap<NpcType, String> overrides) {
         Minecraft mc = Minecraft.getInstance();
-        mc.execute(() -> mc.setScreen(new NpcTypeSelectScreen(overrides)));
+        // En 1.20.1, setScreen es seguro para llamar en el cliente directamente
+        mc.setScreen(new NpcTypeSelectScreen(overrides));
     }
 }

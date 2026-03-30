@@ -1,12 +1,11 @@
-package com.trolmastercard.sexmod.util;
+package com.trolmastercard.sexmod.util; // Ajusta a tu paquete de utilidades
+
+import java.util.Objects;
 
 /**
- * Vec2i - ported from e1.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Simple 2D integer coordinate pair. Provides a Euclidean distance helper
- * from this point to another (x, y) coordinate.
- *
- * No API changes required - this class uses only standard Java.
+ * Vec2i — Portado a 1.20.1.
+ * * Par simple de coordenadas enteras 2D.
+ * * 🚨 ADVERTENCIA: Las variables x e y son mutables. ¡NO modifiques Vec2i.ZERO!
  */
 public class Vec2i {
 
@@ -21,16 +20,30 @@ public class Vec2i {
     }
 
     /**
-     * Euclidean distance from this point to {@code (toX, toY)}.
+     * Distancia euclidiana desde este punto hasta (toX, toY).
      */
     public float distanceTo(int toX, int toY) {
-        float dx = (toX - this.x);
-        float dy = (toY - this.y);
-        return (float) Math.sqrt(dx * dx + dy * dy);
+        // 🧮 Math.hypot es más seguro y rápido que hacer la raíz cuadrada manual
+        return (float) Math.hypot(toX - this.x, toY - this.y);
     }
+
+    // ── Métodos de Objeto Estándar ───────────────────────────────────────────
 
     @Override
     public String toString() {
-        return String.format("(%s, %s)", x, y);
+        return String.format("(%d, %d)", this.x, this.y);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Vec2i vec2i = (Vec2i) o;
+        return this.x == vec2i.x && this.y == vec2i.y;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(this.x, this.y);
     }
 }

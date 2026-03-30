@@ -1,18 +1,19 @@
-package com.trolmastercard.sexmod.util;
+package com.trolmastercard.sexmod.util; // Ajusta a tu paquete de utilidades
 
 /**
- * Simple RGB colour triple (float r, g, b).
- * Ported from f7.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
+ * RgbColor — Portado a 1.20.1.
+ * * Tripleta simple de color RGB (floats de 0.0 a 1.0).
+ * * (Pro-tip: En Minecraft moderno, org.joml.Vector3f hace esto de forma nativa).
  */
 public class RgbColor {
 
     public static final RgbColor BLACK = new RgbColor(0.0F, 0.0F, 0.0F);
 
-    /** Red channel [0..1] */
+    /** Canal Rojo [0..1] */
     public float r;
-    /** Green channel [0..1] */
+    /** Canal Verde [0..1] */
     public float g;
-    /** Blue channel [0..1] */
+    /** Canal Azul [0..1] */
     public float b;
 
     public RgbColor(float r, float g, float b) {
@@ -21,17 +22,17 @@ public class RgbColor {
         this.b = b;
     }
 
-    /** Returns {@code this - other} (component-wise). */
+    /** Devuelve la resta de los componentes (this - other). */
     public RgbColor subtract(RgbColor other) {
         return new RgbColor(this.r - other.r, this.g - other.g, this.b - other.b);
     }
 
-    /** Returns {@code this + other} (component-wise). */
+    /** Devuelve la suma de los componentes (this + other). */
     public RgbColor add(RgbColor other) {
         return new RgbColor(this.r + other.r, this.g + other.g, this.b + other.b);
     }
 
-    /** Returns {@code this * scale} (component-wise). */
+    /** Escala los componentes por un multiplicador (this * scale). */
     public RgbColor scale(float scale) {
         return new RgbColor(this.r * scale, this.g * scale, this.b * scale);
     }

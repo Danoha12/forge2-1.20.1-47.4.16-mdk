@@ -1,7 +1,10 @@
-package com.trolmastercard.sexmod.client.renderer;
+package com.trolmastercard.sexmod.client.renderer; // Ajusta a tu paquete correcto
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
+import com.trolmastercard.sexmod.entity.PyroEntity; // Asegúrate de importar la entidad
+import com.trolmastercard.sexmod.registry.ModSounds; // Asumiendo que existe
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -18,173 +21,144 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import javax.annotation.Nullable;
 
 /**
- * PyroRenderer - ported from e.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Renders the "Pyrocinical" easter-egg entity as a billboard sprite quad.
- * The texture is selected based on distance from the local player and
- * whether the entity is in a "fat" state or a walking animation.
- *
- * Textures:
- *   standing  - sexmod:textures/entity/pyrocinical/standing.png
- *   praising  - sexmod:textures/entity/pyrocinical/praising.png
- *   walking1  - sexmod:textures/entity/pyrocinical/walking1.png
- *   walking2  - sexmod:textures/entity/pyrocinical/walking2.png
- *   fat/N     - sexmod:textures/entity/pyrocinical/fat/N.png  (frames 1-30)
- *
- * 1.12.2 - 1.20.1 migrations:
- *   - Render&lt;al&gt; - EntityRenderer&lt;PyroEntity&gt;
- *   - BufferBuilder + Tessellator - VertexConsumer from MultiBufferSource
- *   - DefaultVertexFormats.field_181707_g - DefaultVertexFormat.POSITION_TEX
- *   - GlStateManager.func_179094_E/F - poseStack.pushPose/popPose
- *   - GlStateManager.func_179137_b - poseStack.translate
- *   - GlStateManager.func_179114_b - poseStack.mulPose(Axis.YP.rotationDegrees)
- *   - GlStateManager.func_179152_a - poseStack.scale
- *   - GlStateManager.func_179131_c - vertex color (set per-vertex)
- *   - OpenGlHelper.func_77475_a (lightmap override) - use max brightness (15728880)
- *   - GL11.glDisable(2896) - lighting handled by shader
- *   - entityPlayerSP.field_70173_aa - localPlayer.tickCount
- *   - be.b(val,min,max) - Mth.clamp
- *   - b6.a(prev, cur, t) - MathUtil.lerpVec3
- *   - al.a - PyroEntity.fatStartTick; entity field directly
- *   - c.MISC_PYRO[0] - ModSounds.MISC_PYRO[0]
+ * PyroRenderer — Portado a 1.20.1.
+ * * Renderiza la entidad easter-egg "Pyro" como un sprite 2D billboard (estilo Doom).
+ * * La textura y animación dependen de la distancia y el estado del jugador local.
  */
 @OnlyIn(Dist.CLIENT)
 public class PyroRenderer extends EntityRenderer<PyroEntity> {
 
-    // -- Textures ---------------------------------------------------------------
-    static final ResourceLocation TEX_STANDING =
-            new ResourceLocation("sexmod", "textures/entity/pyrocinical/standing.png");
-    static final ResourceLocation TEX_PRAISING =
-            new ResourceLocation("sexmod", "textures/entity/pyrocinical/praising.png");
-    static final ResourceLocation TEX_WALK1    =
-            new ResourceLocation("sexmod", "textures/entity/pyrocinical/walking1.png");
-    static final ResourceLocation TEX_WALK2    =
-            new ResourceLocation("sexmod", "textures/entity/pyrocinical/walking2.png");
-    static final String           FAT_PREFIX   = "textures/entity/pyrocinical/fat/";
+    // ── Texturas ─────────────────────────────────────────────────────────────
 
-    static final int   FAT_FRAMES  = 30;
-    static final float SCALE_BASE  = 1.4F;
-    static final float WALK_BOB_Y  = 0.75F;
+    static final ResourceLocation TEX_STANDING = new ResourceLocation("sexmod", "textures/entity/pyrocinical/standing.png");
+    static final ResourceLocation TEX_PRAISING = new ResourceLocation("sexmod", "textures/entity/pyrocinical/praising.png");
+    static final ResourceLocation TEX_WALK1    = new ResourceLocation("sexmod", "textures/entity/pyrocinical/walking1.png");
+    static final ResourceLocation TEX_WALK2    = new ResourceLocation("sexmod", "textures/entity/pyrocinical/walking2.png");
 
-    // Cooldown between praising sounds
-    long lastPraiseSoundTime = 0L;
+    // La ruta base para la animación.
+    static final String FAT_PREFIX = "textures/entity/pyrocinical/fat/";
 
+    static final int FAT_FRAMES = 30;
+    static final float SCALE_BASE = 1.4F;
+
+    private long lastPraiseSoundTime = 0L;
     private ResourceLocation lastTexture = null;
 
     public PyroRenderer(EntityRendererProvider.Context ctx) {
         super(ctx);
     }
 
-    // -- EntityRenderer contract ------------------------------------------------
-
     @Nullable
     @Override
     public ResourceLocation getTextureLocation(PyroEntity entity) {
-        return null; // texture selected dynamically
+        // En este renderizador personalizado, la textura se selecciona dinámicamente en render()
+        return TEX_STANDING;
     }
+
+    // ── Lógica Principal de Renderizado ──────────────────────────────────────
 
     @Override
     public void render(PyroEntity entity, float entityYaw, float partialTick,
                        PoseStack ps, MultiBufferSource bufferSource, int packedLight) {
 
-        Minecraft mc   = Minecraft.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         LocalPlayer lp = mc.player;
         if (lp == null) return;
 
-        Vec3 entityPos = MathUtil.lerpVec3(
-                new Vec3(entity.xOld, entity.yOld, entity.zOld),
-                entity.position(), partialTick);
-        Vec3 playerPos = MathUtil.lerpVec3(
-                new Vec3(lp.xOld, lp.yOld, lp.zOld),
-                lp.position(), partialTick);
+        // 1.20.1: getPosition() y getEyePosition() ya aplican LERP internamente.
+        Vec3 entityPos = entity.getPosition(partialTick);
+        Vec3 playerPos = lp.getPosition(partialTick);
 
-        Vec3  delta    = entityPos.subtract(playerPos);
-        double dist    = Math.abs(delta.x) + Math.abs(delta.y) + Math.abs(delta.z);
+        // Distancia Manhattan aproximada (rápida de calcular)
+        Vec3 delta = entityPos.subtract(playerPos);
+        double dist = Math.abs(delta.x) + Math.abs(delta.y) + Math.abs(delta.z);
 
-        ResourceLocation tex  = selectTexture(entity, dist);
-        float            size = SCALE_BASE + getScaleAdd(entity, partialTick);
-        float            alpha = getFadeAlpha(entity, partialTick);
-        double           bobY  = getBobY(tex);
+        ResourceLocation tex = selectTexture(entity, dist, lp);
+        float size = SCALE_BASE + getScaleAdd(entity, partialTick, lp);
+        float alpha = getFadeAlpha(entity, partialTick, lp);
+        double bobY = getBobY(tex, lp);
 
-        // --- Sound trigger ---
-        if (lastTexture != TEX_PRAISING && tex == TEX_PRAISING) {
+        // ── Gatillo de Sonido ──
+        if (this.lastTexture != TEX_PRAISING && tex == TEX_PRAISING) {
             long now = System.currentTimeMillis();
-            if (now > lastPraiseSoundTime + 60_000L) {
-                lp.playSound(ModSounds.MISC_PYRO[0], 1.0F, 1.0F);
-                lastPraiseSoundTime = now;
+            if (now > this.lastPraiseSoundTime + 60_000L) {
+                // Asumiendo que ModSounds.MISC_PYRO[0] existe
+                lp.playSound(ModSounds.MISC_PYRO[0].get(), 1.0F, 1.0F);
+                this.lastPraiseSoundTime = now;
             }
         }
-        lastTexture = tex;
+        this.lastTexture = tex;
 
-        // --- Render billboard quad ---
+        // ── Construcción del Quad (Billboard 2D) ──
         ps.pushPose();
-        ps.translate(delta.x, delta.y + bobY, delta.z);
-        ps.mulPose(com.mojang.math.Axis.YP.rotationDegrees(180.0F - this.entityRenderDispatcher.camera.getYRot()));
+
+        // El PoseStack de EntityRenderer YA ESTÁ trasladado a entityPos.
+        // Solo necesitamos añadir el boteo vertical del caminar (bobY).
+        ps.translate(0.0D, bobY, 0.0D);
+
+        // Rotación Billboard: Mirar siempre a la cámara
+        ps.mulPose(Axis.YP.rotationDegrees(180.0F - this.entityRenderDispatcher.camera.getYRot()));
+
+        // Centramos el sprite y aplicamos escala
+        ps.translate(0.0D, size / 2.0D, 0.0D); // Subir la mitad para que no se hunda en el suelo
         ps.scale(size, size, size);
 
-        VertexConsumer vc = bufferSource.getBuffer(RenderType.entityTranslucent(tex));
+        VertexConsumer vc = bufferSource.getBuffer(RenderType.entityTranslucentCull(tex));
         PoseStack.Pose pose = ps.last();
 
-        int light = 15728880; // max brightness for billboards
+        int light = 15728880; // Luz máxima (FullBright) para que brille en la oscuridad
 
-        vc.vertex(pose.pose(), -1.0F, 0.0F, 0.0F).color(1f, 1f, 1f, alpha).uv(0f, 1f).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(light).normal(pose.normal(), 0, 1, 0).endVertex();
-        vc.vertex(pose.pose(),  1.0F, 0.0F, 0.0F).color(1f, 1f, 1f, alpha).uv(1f, 1f).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(light).normal(pose.normal(), 0, 1, 0).endVertex();
-        vc.vertex(pose.pose(),  1.0F, 2.0F, 0.0F).color(1f, 1f, 1f, alpha).uv(1f, 0f).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(light).normal(pose.normal(), 0, 1, 0).endVertex();
-        vc.vertex(pose.pose(), -1.0F, 2.0F, 0.0F).color(1f, 1f, 1f, alpha).uv(0f, 0f).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(light).normal(pose.normal(), 0, 1, 0).endVertex();
+        // Vertices del plano 2D centrado (De -0.5 a 0.5)
+        vc.vertex(pose.pose(), -0.5F, -0.5F, 0.0F).color(1f, 1f, 1f, alpha).uv(0f, 1f).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(light).normal(pose.normal(), 0, 1, 0).endVertex();
+        vc.vertex(pose.pose(),  0.5F, -0.5F, 0.0F).color(1f, 1f, 1f, alpha).uv(1f, 1f).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(light).normal(pose.normal(), 0, 1, 0).endVertex();
+        vc.vertex(pose.pose(),  0.5F,  0.5F, 0.0F).color(1f, 1f, 1f, alpha).uv(1f, 0f).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(light).normal(pose.normal(), 0, 1, 0).endVertex();
+        vc.vertex(pose.pose(), -0.5F,  0.5F, 0.0F).color(1f, 1f, 1f, alpha).uv(0f, 0f).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(light).normal(pose.normal(), 0, 1, 0).endVertex();
 
         ps.popPose();
+
+        super.render(entity, entityYaw, partialTick, ps, bufferSource, packedLight);
     }
 
-    // -- Helpers ----------------------------------------------------------------
+    // ── Lógica de Animación y Estado ─────────────────────────────────────────
 
-    ResourceLocation selectTexture(PyroEntity entity, double dist) {
+    private ResourceLocation selectTexture(PyroEntity entity, double dist, LocalPlayer lp) {
         if (entity.fatStartTick != -1) {
-            int frame = getFatFrame(entity);
-            return new ResourceLocation("sexmod",
-                    String.format("%s%d.png", FAT_PREFIX, frame));
+            int frame = getFatFrame(entity, lp);
+            return new ResourceLocation("sexmod", FAT_PREFIX + frame + ".png");
         }
         if (dist < 3.0D) return TEX_PRAISING;
 
-        // If entity hasn't moved - standing
-        Vec3 delta = new Vec3(entity.xOld - entity.getX(),
-                               entity.yOld - entity.getY(),
-                               entity.zOld - entity.getZ());
-        double moved = Math.abs(delta.x) + Math.abs(delta.y) + Math.abs(delta.z);
-        if (moved == 0.0D) return TEX_STANDING;
+        // Si la entidad no se ha movido
+        if (entity.getDeltaMovement().lengthSqr() < 0.001D) {
+            return TEX_STANDING;
+        }
 
-        LocalPlayer lp = Minecraft.getInstance().player;
-        if (lp == null) return TEX_STANDING;
         return (Math.sin(lp.tickCount * 0.75F) > 0.0D) ? TEX_WALK1 : TEX_WALK2;
     }
 
-    double getBobY(ResourceLocation tex) {
+    private double getBobY(ResourceLocation tex, LocalPlayer lp) {
         if (!TEX_WALK1.equals(tex) && !TEX_WALK2.equals(tex)) return 0.0D;
-        LocalPlayer lp = Minecraft.getInstance().player;
-        if (lp == null) return 0.0D;
         return Math.sin(lp.tickCount * 0.75F) * 0.1D;
     }
 
-    int getFatFrame(PyroEntity entity) {
-        LocalPlayer lp = Minecraft.getInstance().player;
-        if (entity.fatStartTick == -1 || lp == null) return 0;
-        return (int) Mth.clamp(lp.tickCount - entity.fatStartTick, 1.0F, FAT_FRAMES);
+    private int getFatFrame(PyroEntity entity, LocalPlayer lp) {
+        if (entity.fatStartTick == -1) return 0;
+        return Mth.clamp(lp.tickCount - entity.fatStartTick, 1, FAT_FRAMES);
     }
 
-    float getScaleAdd(PyroEntity entity, float partialTick) {
+    private float getScaleAdd(PyroEntity entity, float partialTick, LocalPlayer lp) {
         if (entity.fatStartTick == -1) return 0.0F;
-        int frame = getFatFrame(entity);
-        if (frame == FAT_FRAMES) return 1.0F;
-        LocalPlayer lp = Minecraft.getInstance().player;
-        if (lp == null) return 0.0F;
+        int frame = getFatFrame(entity, lp);
+        if (frame >= FAT_FRAMES) return 1.0F;
         return (frame + partialTick) / FAT_FRAMES;
     }
 
-    float getFadeAlpha(PyroEntity entity, float partialTick) {
+    private float getFadeAlpha(PyroEntity entity, float partialTick, LocalPlayer lp) {
         if (entity.fatStartTick == -1) return 1.0F;
-        LocalPlayer lp = Minecraft.getInstance().player;
-        if (lp == null) return 1.0F;
-        if (lp.tickCount - entity.fatStartTick > 120) return 0.0F;
-        float elapsed = Mth.clamp(lp.tickCount - entity.fatStartTick, 90.0F, 120.0F) - 90.0F;
-        return 1.0F - (elapsed + partialTick) / 30.0F;
+        int ticksSince = lp.tickCount - entity.fatStartTick;
+        if (ticksSince > 120) return 0.0F;
+
+        float elapsed = Mth.clamp(ticksSince, 90.0F, 120.0F) - 90.0F;
+        return 1.0F - ((elapsed + partialTick) / 30.0F);
     }
 }

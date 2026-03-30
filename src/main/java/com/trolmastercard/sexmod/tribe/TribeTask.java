@@ -1,262 +1,195 @@
 package com.trolmastercard.sexmod.tribe;
-import com.trolmastercard.sexmod.KoboldEntity;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.KoboldEntity;
+import com.trolmastercard.sexmod.registry.AnimState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * TribeTask - ported from bs.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Represents a single task assigned to kobolds in a tribe.
- * Tracks the task's location, type, the set of BlockPos positions it covers,
- * and the list of kobolds currently working on it.
- *
- * Inner enum {@link Kind} (original {@code bs.a}):
- *   FALL_TREE(1) - felling a tree, max 1 kobold worker
- *   MINE(3)      - mining, max 3 kobold workers
- *
- * Field mapping:
- *   a = anchorPos   (BlockPos - base position of the task)
- *   c = kind        (Kind enum)
- *   b = positions   (HashSet<BlockPos> - all block positions in scope)
- *   f = members     (List<KoboldEntity> - kobolds assigned)
- *   e = facing      (Direction - facing dir, default NORTH)
- *
- * Static constants:
- *   d = 30  - TREE_SCAN_HEIGHT (max height delta when scanning a tree)
- *
- * In 1.12.2:
- *   - {@code EnumFacing} - {@link Direction}
- *   - {@code BlockLog instanceof} - {@code blockState.is(BlockTags.LOGS)}
- *   - {@code Material.field_151579_a} (air material) - {@code block.isAir(level, pos)}
- *     or simply checking if the block is not a log
- *   - {@code blockPos.func_177982_a(dx,dy,dz)} - {@code blockPos.offset(dx,dy,dz)}
- *   - {@code blockPos.func_177984_a()} - {@code blockPos.above()}
- *   - {@code blockPos.func_177977_b()} - {@code blockPos.below()}
- *   - {@code blockPos.func_177958_n/956_o/952_p()} - {@code blockPos.getX/Y/Z()}
- *   - {@code ax.b(uuid, task)} - {@link TribeManager#addTask(UUID, TribeTask)}
- *   - {@code ax.p(uuid)} - {@link TribeManager#getTasksForTribe(UUID)}
- *   - {@code em.G} - {@code BaseNpcEntity.FROZEN} DataParameter
- *   - {@code em.field_184212_Q().func_187227_b(em.G, false)} -
- *     {@code npc.getEntityData().set(BaseNpcEntity.FROZEN, false)}
- *   - {@code ff.ae()} - {@code kobold.getSexPartner()}
- *   - {@code ff.b(fp.NULL)} - {@code kobold.setAnimState(AnimState.NULL)}
+ * TribeTask — Portado a 1.20.1.
+ * * Tareas físicas asignadas a los Kobolds (Talar, Minar).
  */
 public class TribeTask {
 
     public static final int TREE_SCAN_HEIGHT = 30;
 
     private final BlockPos anchorPos;
-    private final Kind     kind;
-    private final HashSet<BlockPos> positions;
-    private final List<KoboldEntity> members = new ArrayList<>();
+    private final Kind kind;
+    private final Set<BlockPos> targetBlocks;
+
+    // Usamos CopyOnWriteArrayList para evitar ConcurrentModificationException
+    // si un Kobold muere o es removido mientras la tribu itera sobre los trabajadores.
+    private final List<KoboldEntity> workers = new CopyOnWriteArrayList<>();
+
     private Direction facing = Direction.NORTH;
 
-    // =========================================================================
-    //  Constructors
-    // =========================================================================
-
-    public TribeTask(BlockPos anchorPos, Kind kind, HashSet<BlockPos> positions) {
+    public TribeTask(BlockPos anchorPos, Kind kind, Set<BlockPos> targetBlocks) {
         this.anchorPos = anchorPos;
-        this.kind      = kind;
-        this.positions = positions;
+        this.kind = kind;
+        this.targetBlocks = targetBlocks;
     }
 
-    public TribeTask(BlockPos anchorPos, Kind kind, HashSet<BlockPos> positions,
-                     Direction facing) {
-        this(anchorPos, kind, positions);
+    public TribeTask(BlockPos anchorPos, Kind kind, Set<BlockPos> targetBlocks, Direction facing) {
+        this(anchorPos, kind, targetBlocks);
         this.facing = facing;
     }
 
-    // =========================================================================
-    //  Accessors
-    // =========================================================================
+    // ── Getters ──────────────────────────────────────────────────────────────
 
-    public Direction getFacing()       { return facing;    }
-    public BlockPos  getAnchorPos()    { return anchorPos; }
-    public Kind      getKind()         { return kind;      }
-    public HashSet<BlockPos> getPositions() { return positions; }
-    public List<KoboldEntity> getMembers() { return members; }
+    public BlockPos getTargetPos() { return anchorPos; }
+    public Kind getKind() { return kind; }
+    public Set<BlockPos> getTargetBlocks() { return targetBlocks; }
+    public Direction getFacing() { return facing; }
+    public List<KoboldEntity> getWorkers() { return workers; }
 
-    // =========================================================================
-    //  Position management
-    // =========================================================================
+    // ── Gestión de Trabajadores ──────────────────────────────────────────────
 
-    public void addPosition(BlockPos pos)               { positions.add(pos); }
-    public void addPositions(HashSet<BlockPos> set)     { positions.addAll(set); }
-    public void removePosition(BlockPos pos)            { positions.remove(pos); }
-    public void removePositions(HashSet<BlockPos> set)  { if (!set.isEmpty()) positions.removeAll(set); }
-    public boolean containsPosition(BlockPos pos)       { return positions.contains(pos); }
+    public boolean hasWorker(KoboldEntity kobold) {
+        return workers.contains(kobold);
+    }
 
-    // =========================================================================
-    //  Member management
-    // =========================================================================
-
-    /**
-     * Attempts to assign a kobold to this task.
-     * Returns false if the task already has its maximum number of workers.
-     *
-     * Original: {@code bs.a(ff)}
-     */
-    public boolean tryAssign(KoboldEntity kobold) {
-        if (kind.maxWorkers <= members.size()) return false;
-        members.add(kobold);
+    public boolean assignWorker(KoboldEntity kobold) {
+        if (workers.size() >= kind.maxWorkers) return false;
+        if (!workers.contains(kobold)) {
+            workers.add(kobold);
+        }
         return true;
     }
 
-    /** Removes a kobold from the worker list. Original: {@code bs.c(ff)} */
-    public void unassign(KoboldEntity kobold) { members.remove(kobold); }
-
-    /** Returns true if the task is at maximum capacity. Original: {@code bs.e()} */
-    public boolean isFull() { return kind.maxWorkers <= members.size(); }
-
-    /** Returns true if the given kobold is assigned. Original: {@code bs.b(ff)} */
-    public boolean isAssigned(KoboldEntity kobold) { return members.contains(kobold); }
-
-    /**
-     * Dismisses all assigned kobolds and clears the member list.
-     * Resets each kobold's frozen/animation state.
-     *
-     * Original: {@code bs.a()} (void, no params)
-     */
-    public void dismissAll() {
-        for (KoboldEntity kobold : members) {
-            try {
-                if (kobold.getSexPartner() == null) {
-                    kobold.setNoPhysics(false);
-                    kobold.noPhysics = false;
-                    kobold.setAnimStateNull();           // ff.b(fp.NULL)
-                    kobold.getEntityData().set(
-                        com.trolmastercard.sexmod.entity.BaseNpcEntity.FROZEN, false);
-                }
-            } catch (RuntimeException ignored) {}
-        }
-        members.clear();
+    public void removeWorker(KoboldEntity kobold) {
+        workers.remove(kobold);
     }
 
-    // =========================================================================
-    //  Static: build a FALL_TREE task for the tree at the given position
-    //  Original: bs.a(World, BlockPos, UUID)
-    // =========================================================================
+    public boolean isFull() {
+        return workers.size() >= kind.maxWorkers;
+    }
 
-    /**
-     * Finds the full extent of the tree whose trunk contains {@code pos},
-     * deduplicates positions already claimed by other tasks of the same tribe,
-     * registers the new task with {@link TribeManager}, and returns the final
-     * set of block positions.
-     *
-     * Algorithm:
-     *  1. Scan downward to find the bottom of the trunk.
-     *  2. Scan upward to find the top log block.
-     *  3. Collect a vertical column from bottom to top.
-     *  4. BFS outward on each Y level to collect all connected log blocks.
-     *  5. Exclude the trunk's X/Z column from the BFS result (trunk handled by column).
-     *  6. Remove any positions already owned by another task.
-     *  7. Register as a new FALL_TREE task.
+    public void onMemberRemoved(KoboldEntity kobold) {
+        removeWorker(kobold);
+    }
+
+    /** * Libera a todos los trabajadores y resetea su estado físico.
+     * Fundamental para que no se queden flotando si el árbol se destruye de golpe.
      */
-    public static HashSet<BlockPos> buildTreeTask(Level level, BlockPos pos, UUID tribeId) {
-        // Find bottom log
-        BlockPos bottom = pos;
-        while (!isTrunkBottom(level, bottom)) bottom = bottom.below();
-
-        // Find top log
-        BlockPos top = pos;
-        while (isLog(level, top.above())) top = top.above();
-
-        // Vertical column
-        HashSet<BlockPos> result = new HashSet<>();
-        int height = top.getY() - bottom.getY();
-        for (int i = 0; i <= height; i++) result.add(bottom.offset(0, i, 0));
-
-        // BFS canopy (connected logs at each level)
-        HashSet<BlockPos> canopy = floodFillLogs(level, bottom);
-
-        // Remove trunk column from canopy
-        HashSet<BlockPos> trunk = new HashSet<>();
-        for (BlockPos bp : canopy) {
-            if (bp.getX() == bottom.getX() && bp.getZ() == bottom.getZ()) trunk.add(bp);
-        }
-        canopy.removeAll(trunk);
-        result.addAll(canopy);
-
-        // Remove positions claimed by other tasks
-        HashSet<BlockPos> claimed = new HashSet<>();
-        for (TribeTask task : TribeManager.getTasksForTribe(tribeId)) {
-            HashSet<BlockPos> taskPositions = task.getPositions();
-            for (BlockPos bp : result) {
-                if (taskPositions.contains(bp)) { claimed.add(bp); break; }
+    public void dismissAll() {
+        for (KoboldEntity k : workers) {
+            try {
+                if (!k.isInteractiveModeActive()) { // Reemplaza la comprobación de getCurrentSexPartner
+                    k.setNoGravity(false);
+                    k.noPhysics = false;
+                    k.setAnimState(AnimState.NULL);
+                    k.getEntityData().set(BaseNpcEntity.DATA_FROZEN, false);
+                }
+            } catch (Exception e) {
+                System.err.println("[SexMod] Error al liberar Kobold de la tarea: " + e.getMessage());
             }
         }
-        result.removeAll(claimed);
+        workers.clear();
+    }
 
-        TribeTask task = new TribeTask(bottom, Kind.FALL_TREE, result);
-        TribeManager.addTask(tribeId, task);
+    // ── Escáner de Árboles (Flood Fill) ──────────────────────────────────────
+
+    public static Set<BlockPos> buildTreeTask(Level level, BlockPos startPos, UUID tribeId) {
+        BlockPos bottom = startPos;
+
+        // 1. Encontrar la base real del tronco (por si picaron un bloque del medio)
+        while (isLog(level, bottom.below())) {
+            bottom = bottom.below();
+        }
+
+        // 2. Encontrar la cima del tronco principal
+        BlockPos top = bottom;
+        while (isLog(level, top.above()) && (top.getY() - bottom.getY()) < TREE_SCAN_HEIGHT) {
+            top = top.above();
+        }
+
+        Set<BlockPos> result = new HashSet<>();
+
+        // 3. Añadir la columna principal para garantizar la estructura base
+        for (int y = bottom.getY(); y <= top.getY(); y++) {
+            result.add(new BlockPos(bottom.getX(), y, bottom.getZ()));
+        }
+
+        // 4. BFS (Flood Fill) para absorber las ramas
+        result.addAll(floodFillLogs(level, bottom));
+
+        // 5. Filtrar bloques que ya estén reclamados por otra tarea de esta tribu
+        TribeData data = TribeManager.getTribe(tribeId); // Asumiendo que añadiste este getter
+        if (data != null) {
+            Set<TribeTask> currentTasks = data.getTasks();
+            Set<BlockPos> claimed = new HashSet<>();
+
+            for (TribeTask task : currentTasks) {
+                // Intersección de conjuntos más rápida
+                for (BlockPos bp : result) {
+                    if (task.getTargetBlocks().contains(bp)) {
+                        claimed.add(bp);
+                    }
+                }
+            }
+            result.removeAll(claimed);
+        }
+
+        // 6. Registrar la nueva tarea si quedan bloques
+        if (!result.isEmpty()) {
+            TribeTask task = new TribeTask(bottom, Kind.FALL_TREE, result);
+            if (data != null) {
+                data.addTask(task);
+                TribeManager.markDirty();
+            }
+        }
+
         return result;
     }
 
-    /** True if the block above pos is not a log (= top of trunk). */
-    static boolean isTrunkTop(Level level, BlockPos pos) {
-        return !isLog(level, pos.above());
-    }
-
-    /** True if the block below pos is not a log AND not non-solid (= bottom of trunk). */
-    static boolean isTrunkBottom(Level level, BlockPos pos) {
-        BlockState below = level.getBlockState(pos.below());
-        if (isLog(level, pos.below())) return false;
-        // Air or non-solid below - we're at the bottom
-        if (!below.getMaterial().isSolid()) return false;
-        return true;
-    }
-
-    static boolean isLog(Level level, BlockPos pos) {
+    private static boolean isLog(Level level, BlockPos pos) {
         return level.getBlockState(pos).is(BlockTags.LOGS);
     }
 
-    /**
-     * BFS flood-fill of all connected log blocks starting from {@code start}.
-     * Searches 8-connected horizontal neighbours and one block upward.
-     *
-     * Original: {@code bs.a(World, BlockPos)} and {@code bs.a(World, BlockPos, HashSet)}
-     */
-    static HashSet<BlockPos> floodFillLogs(Level level, BlockPos start) {
-        return floodFillLogs(level, start, new HashSet<>());
-    }
+    /** Flood-fill iterativo con límite de seguridad (500 bloques). */
+    private static Set<BlockPos> floodFillLogs(Level level, BlockPos start) {
+        Set<BlockPos> visited = new HashSet<>();
+        Queue<BlockPos> queue = new ArrayDeque<>(); // ArrayDeque es más rápido que LinkedList
 
-    static HashSet<BlockPos> floodFillLogs(Level level, BlockPos pos, HashSet<BlockPos> visited) {
-        if (visited.contains(pos)) return new HashSet<>();
-        visited.add(pos);
+        queue.add(start);
+        visited.add(start);
 
+        // Direcciones de expansión (adyacentes y diagonales 3D cercanas)
         int[][] offsets = {
-            {1,0,0},{-1,0,0},{0,0,1},{0,0,-1},
-            {1,0,1},{-1,0,-1},{-1,0,1},{1,0,-1},
-            {0,1,0},
-            {1,1,0},{-1,1,0},{0,1,1},{0,1,-1},
-            {1,1,1},{-1,1,-1},{-1,1,1},{1,1,-1}
+                {1,0,0}, {-1,0,0}, {0,0,1}, {0,0,-1},
+                {1,0,1}, {-1,0,-1}, {-1,0,1}, {1,0,-1},
+                {0,1,0},
+                {1,1,0}, {-1,1,0}, {0,1,1}, {0,1,-1},
+                {1,1,1}, {-1,1,-1}, {-1,1,1}, {1,1,-1}
         };
 
-        for (int[] o : offsets) {
-            BlockPos next = pos.offset(o[0], o[1], o[2]);
-            if (isLog(level, next)) visited.addAll(floodFillLogs(level, next, visited));
+        while (!queue.isEmpty() && visited.size() < 500) {
+            BlockPos current = queue.poll();
+
+            for (int[] o : offsets) {
+                BlockPos next = current.offset(o[0], o[1], o[2]);
+                if (!visited.contains(next) && isLog(level, next)) {
+                    visited.add(next);
+                    queue.add(next);
+                }
+            }
         }
+
         return visited;
     }
 
-    // =========================================================================
-    //  Inner enum: Kind (original bs.a)
-    // =========================================================================
+    // ── Enumeración de Tipos ─────────────────────────────────────────────────
 
     public enum Kind {
         FALL_TREE(1),
         MINE(3);
 
-        /** Maximum number of kobold workers for this task kind. */
         public final int maxWorkers;
 
         Kind(int maxWorkers) {

@@ -1,105 +1,70 @@
-package com.trolmastercard.sexmod.network.packet;
-import com.trolmastercard.sexmod.BaseNpcEntity;
+package com.trolmastercard.sexmod.network.packet; // Ajusta al paquete de red
 
-import com.trolmastercard.sexmod.entity.AnimState;
+import com.trolmastercard.sexmod.data.GalathOwnershipData;
+import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
-import com.trolmastercard.sexmod.entity.GalathOwnershipData;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Entity;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * RequestRidingPacket - ported from bk.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Sent CLIENT - SERVER. Makes the sending player start riding the NPC that is
- * bound to them via {@link GalathOwnershipData}.
- *
- * Sequence:
- *  1. Look up the player's bound NPC UUID via {@code GalathOwnershipData.getOwnerOf(playerUUID)}.
- *  2. Find that NPC in the active NPC list.
- *  3. Call {@code player.startRiding(npc, true)}.
- *  4. Set the NPC's animation state to {@code CONTROLLED_FLIGHT}.
- *  5. Set NPC's target player.
- *  6. Give the NPC an upward impulse (+0.25 Y).
- *  7. Mark the chunk for re-broadcast.
- *
- * In 1.12.2:
- *   - {@code v.b(player)} - {@link GalathOwnershipData#getOwnerOf(java.util.UUID)}
- *   - {@code em.a(uuid)} - {@link BaseNpcEntity#getByMasterUUID(UUID)}
- *   - {@code entityPlayerMP.func_184205_a(entity, true)} - {@code player.startRiding(npc, true)}
- *   - {@code em.b(fp.CONTROLLED_FLIGHT)} - {@code npc.setAnimState(AnimState.CONTROLLED_FLIGHT)}
- *   - {@code em.a(player)} - {@code npc.setPlayerTarget(player)}
- *   - {@code em.field_70181_x = 0.25} - {@code npc.setDeltaMovement(x, 0.25, z)}
- *   - {@code world.func_175726_f(blockPos).func_76622_b(entity)} -
- *     {@code level.getChunkAt(npc.blockPosition()).setUnsaved(true)}
+ * RequestRidingPacket — Portado a 1.20.1.
+ * * CLIENTE -> SERVIDOR.
+ * * Hace que el jugador monte a su NPC vinculado (Galath) y comience el vuelo.
  */
 public class RequestRidingPacket {
 
-    private final boolean valid;
+    // Paquete vacío: no necesitamos variables de estado.
 
-    // =========================================================================
-    //  Constructors
-    // =========================================================================
+    public RequestRidingPacket() {}
 
-    public RequestRidingPacket() {
-        this.valid = true;
+    // ── Codec ────────────────────────────────────────────────────────────────
+
+    public static void encode(RequestRidingPacket msg, FriendlyByteBuf buf) {
+        // Nada que escribir
     }
 
-    // =========================================================================
-    //  Codec
-    // =========================================================================
-
     public static RequestRidingPacket decode(FriendlyByteBuf buf) {
+        // Nada que leer
         return new RequestRidingPacket();
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        // no fields
-    }
+    // ── Manejador (Servidor) ─────────────────────────────────────────────────
 
-    // =========================================================================
-    //  Handler
-    // =========================================================================
-
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
+    public static void handle(RequestRidingPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
+
         ctx.enqueueWork(() -> {
-            if (!valid) {
-                System.out.println("received an invalid message @RequestRiding :(");
-                return;
-            }
-
             ServerPlayer player = ctx.getSender();
-            if (player == null) {
-                System.out.println("received an invalid message @RequestRiding :(");
-                return;
-            }
+            if (player == null) return;
 
+            // 1. Buscar la UUID del NPC vinculado a este jugador
             UUID npcUUID = GalathOwnershipData.getOwnerOf(player.getUUID());
             if (npcUUID == null) return;
 
+            // 2. Buscar la entidad viva en el servidor
             BaseNpcEntity npc = BaseNpcEntity.getByMasterUUID(npcUUID);
-            if (npc == null) return;
+            if (npc == null || !npc.isAlive()) return;
 
-            // Start riding
-            player.startRiding((Entity) npc, true);
+            // 3. Montar al NPC (true = forzar montaje)
+            player.startRiding(npc, true);
 
-            // Set flight animation
+            // 4. Cambiar animación a Vuelo Controlado
             npc.setAnimState(AnimState.CONTROLLED_FLIGHT);
 
-            // Set target player
+            // 5. Asignar el objetivo / conductor
             npc.setPlayerTarget(player);
 
-            // Launch upward
-            npc.setDeltaMovement(npc.getDeltaMovement().x, 0.25, npc.getDeltaMovement().z);
+            // 6. Impulso inicial hacia arriba (+0.25 Y)
+            npc.setDeltaMovement(npc.getDeltaMovement().x, 0.25D, npc.getDeltaMovement().z);
 
-            // Mark chunk dirty
+            // 7. Marcar el chunk como modificado para que guarde el estado
             player.level().getChunkAt(npc.blockPosition()).setUnsaved(true);
         });
+
         ctx.setPacketHandled(true);
     }
 }

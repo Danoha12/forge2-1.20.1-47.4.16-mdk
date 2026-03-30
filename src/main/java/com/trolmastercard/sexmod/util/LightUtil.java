@@ -1,7 +1,8 @@
 package com.trolmastercard.sexmod.util;
-import com.trolmastercard.sexmod.ModConstants;
 
-import com.trolmastercard.sexmod.util.AngleTarget;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
 import java.awt.Toolkit;
@@ -11,251 +12,117 @@ import java.util.Random;
 import java.util.UUID;
 
 /**
- * LightUtil - ported from be.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * General-purpose static utilities used throughout the mod:
- *   - Angle delta computation
- *   - Heading / pitch from Vec3 direction
- *   - Clipboard copy
- *   - String capitalisation
- *   - Range check (between)
- *   - Weighted random (triangular distribution)
- *   - Random sign (-1)
- *   - Float clamp
- *   - Random float with optional sign flip
- *   - Value snap-to-zero (deadzone)
- *   - Round double to int
- *   - Timed background thread (scheduleTask)
- *
- * Method mapping (obfuscated - clean):
- *   a(double,double)       - angleDelta(double,double)
- *   a(Vec3d,Vec3d)         - getHeadingTo(Vec3,Vec3) - AngleTarget
- *   a(String)              - copyToClipboard(String)
- *   b(String)              - capitalise(String)
- *   a(double,double,double)- inRange(double,double,double)
- *   a(int)                 - weightedRandom(int)
- *   a()                    - randomSign()
- *   b(float,float,float)   - clamp(float,float,float)
- *   b(double,double,double)- clamp(double,double,double)
- *   a(float,boolean)       - randomFloat(float,boolean)
- *   a(float,float,float)   (3 float args) - snapToZero(float,float,float)
- *   a(double)              - roundToInt(double)
- *   a(int,Runnable)        - scheduleTask(int,Runnable)
- *
- * ({@code bm} - {@link AngleTarget})
+ * LightUtil — Portado a 1.20.1 y optimizado.
+ * * Colección de utilidades matemáticas, de sistema y de mundo.
+ * Incluye: Cálculos de ángulos, manejo de portapapeles, hilos temporizados y detección de superficie.
  */
 public final class LightUtil {
 
+    private static final Random RNG = new Random();
+
     private LightUtil() {}
 
-    // =========================================================================
-    //  a(double, double) - angleDelta
-    // =========================================================================
+    // ── Matemáticas de Ángulos ────────────────────────────────────────────────
 
     /**
-     * Returns the shortest signed angular delta (radians) from {@code from} to
-     * {@code to}, both normalised to [0, 2-).
+     * Calcula la diferencia angular más corta entre dos puntos en radianes.
      */
     public static float angleDelta(double from, double to) {
-        from = (from + 2 * Math.PI) % (2 * Math.PI);
-        to   = (to   + 2 * Math.PI) % (2 * Math.PI);
-        double d = to - from;
-        while (d < -Math.PI) d += 2 * Math.PI;
-        while (d >= Math.PI)  d -= 2 * Math.PI;
-        return (float) d;
+        double delta = (to - from) % (Math.PI * 2);
+        if (delta < -Math.PI) delta += Math.PI * 2;
+        if (delta >= Math.PI) delta -= Math.PI * 2;
+        return (float) delta;
     }
 
-    // =========================================================================
-    //  a(Vec3d, Vec3d) - getHeadingTo
-    // =========================================================================
-
     /**
-     * Returns the yaw and pitch (in radians) required to look from {@code from}
-     * to {@code to}.
-     *
-     * Original: {@code be.a(Vec3d, Vec3d)} - {@code bm(yaw, pitch)}
-     * ({@code bm} - {@link AngleTarget})
+     * Calcula el Yaw y Pitch necesarios para mirar desde un punto A a un punto B.
      */
     public static AngleTarget getHeadingTo(Vec3 from, Vec3 to) {
         Vec3 dir = to.subtract(from).normalize();
-        float yaw   = (float) Math.atan2(dir.x, dir.z);
-        float pitch = (float) Math.atan2(dir.y,
-            Math.sqrt(dir.x * dir.x + dir.z * dir.z));
+        float yaw = (float) Mth.atan2(dir.x, dir.z);
+        float pitch = (float) Mth.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z));
         return new AngleTarget(yaw, pitch);
     }
 
-    // =========================================================================
-    //  a(String) - copyToClipboard
-    // =========================================================================
+    // ── Utilidades de Sistema ─────────────────────────────────────────────────
 
-    /** Copies {@code text} to the system clipboard. */
+    /** Copia un texto al portapapeles del sistema operativo. */
     public static void copyToClipboard(String text) {
-        Clipboard cb = Toolkit.getDefaultToolkit().getSystemClipboard();
-        cb.setContents(new StringSelection(text), null);
+        try {
+            Clipboard cb = Toolkit.getDefaultToolkit().getSystemClipboard();
+            cb.setContents(new StringSelection(text), null);
+        } catch (Exception e) {
+            // Falla silenciosa si no hay entorno gráfico (servidores)
+        }
     }
 
-    // =========================================================================
-    //  b(String) - capitalise
-    // =========================================================================
-
-    /**
-     * Returns {@code s} with the first character upper-cased and the rest
-     * lower-cased. Returns {@code s} unchanged if null or empty.
-     */
+    /** Convierte "hola mundo" en "Hola mundo". */
     public static String capitalise(String s) {
         if (s == null || s.isEmpty()) return s;
-        return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase();
+        return s.substring(0, 1).toUpperCase() + s.substring(1).toLowerCase();
     }
 
-    // =========================================================================
-    //  a(double, double, double) - inRange  [min, max)
-    // =========================================================================
+    // ── Aleatoriedad y Rangos ─────────────────────────────────────────────────
 
-    /** Returns true if {@code min <= value < max}. */
     public static boolean inRange(double value, double min, double max) {
         return value >= min && value < max;
     }
 
-    // =========================================================================
-    //  a(int) - weightedRandom  (triangular distribution 0..n)
-    // =========================================================================
-
-    /**
-     * Picks a random integer in [0, n] using a triangular distribution that
-     * favours larger values.  If n <= 0, returns n immediately.
-     */
+    /** Distribución triangular: favorece los números más altos en el rango [0, n]. */
     public static int weightedRandom(int n) {
-        if (n <= 0) return n;
-        Random rng = new Random();
-        // Sum = 0+1+-+n = n*(n+1)/2
-        int sum  = n * (n + 1) / 2;
-        int pick = rng.nextInt(sum) + 1;
-        int acc  = 0;
-        for (int i = 0; i <= n; i++) {
+        if (n <= 0) return 0;
+        int sum = n * (n + 1) / 2;
+        int pick = RNG.nextInt(sum) + 1;
+        int acc = 0;
+        for (int i = 1; i <= n; i++) {
             acc += i;
             if (acc >= pick) return i;
         }
         return n;
     }
 
-    // =========================================================================
-    //  a() - randomSign
-    // =========================================================================
-
-    /**
-     * Returns +1 or -1 at random using the mod's shared {@link Random}.
-     * Original: {@code r.f.nextBoolean() ? 1 : -1}
-     */
     public static int randomSign() {
-        return com.trolmastercard.sexmod.ModConstants.RANDOM.nextBoolean() ? 1 : -1;
+        return RNG.nextBoolean() ? 1 : -1;
     }
 
-    // =========================================================================
-    //  b(float, float, float) / b(double, double, double) - clamp
-    // =========================================================================
-
-    /** Clamps {@code value} to [{@code min}, {@code max}]. */
-    public static float clamp(float value, float min, float max) {
-        return Math.max(min, Math.min(max, value));
+    /** Uso de Mth.clamp para mayor rendimiento en 1.20.1 */
+    public static float clamp(float val, float min, float max) {
+        return Mth.clamp(val, min, max);
     }
-
-    /** Clamps {@code value} to [{@code min}, {@code max}]. */
-    public static double clamp(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    // =========================================================================
-    //  a(float, boolean) - randomFloat
-    // =========================================================================
 
     /**
-     * Returns a random float in [0, scale], optionally negated.
-     * If {@code canBeNegative} is true, the sign is randomly flipped.
+     * Lógica de Deadzone/Snap: mueve un valor hacia un objetivo con un paso fijo.
      */
-    public static float randomFloat(float scale, boolean canBeNegative) {
-        Random rng = new Random();
-        float  val = rng.nextFloat() * scale;
-        if (canBeNegative && rng.nextBoolean()) val = -val;
-        return val;
+    public static float snapToTarget(float current, float target, float step) {
+        if (Math.abs(current - target) <= step) return target;
+        return current < target ? current + step : current - step;
     }
 
-    // =========================================================================
-    //  a(float, float, float) - snapToZero  (deadzone approach)
-    // =========================================================================
+    // ── Gestión de Hilos (Threading) ──────────────────────────────────────────
 
     /**
-     * Moves {@code value} toward {@code target} by {@code step}, but returns
-     * {@code value} unchanged if it is already within {@code step} of
-     * {@code target}.
-     *
-     * Original method name unclear; analysis of the bytecode:
-     *   if |value - target| <= step - return value
-     *   if |value| < |target|:
-     *     if target > 0 - return target - step
-     *     else          - return target + step
-     *   if value > 0 - return value - step
-     *   else         - return value + step
-     */
-    public static float snapToZero(float value, float target, float step) {
-        if (Math.abs(value - target) <= step) return value;
-        if (Math.abs(value) < Math.abs(target)) {
-            return target > 0 ? target - step : target + step;
-        }
-        return value > 0 ? value - step : value + step;
-    }
-
-    // =========================================================================
-    //  a(double) - roundToInt
-    // =========================================================================
-
-    /** Rounds a double to the nearest int. */
-    public static int roundToInt(double value) {
-        return Math.round((float) value);
-    }
-
-    // =========================================================================
-    //  a(int, Runnable) - scheduleTask
-    // =========================================================================
-
-    /**
-     * Schedules {@code task} to run after {@code delayMs} milliseconds on a
-     * background thread named {@code "server/client sexmod thread <uuid>"}.
-     *
-     * Original: {@code be.a(int, Runnable)}
-     * Note: {@code g0.a()} checks if running on the server thread - used
-     * to name the background thread for debugging.
+     * Ejecuta una tarea después de un retraso sin bloquear el hilo principal.
      */
     public static void scheduleTask(int delayMs, Runnable task) {
-        String id = UUID.randomUUID().toString();
-        String prefix = com.trolmastercard.sexmod.util.ServerUtil.isServerThread()
-            ? "server sexmod thread " : "client sexmod thread ";
+        String threadName = "InteractionMod-Worker-" + UUID.randomUUID().toString().substring(0, 8);
         Thread t = new Thread(() -> {
-            try { Thread.sleep(delayMs); } catch (Exception e) { e.printStackTrace(); }
-            task.run();
-        }, prefix + id);
+            try {
+                Thread.sleep(delayMs);
+                task.run();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, threadName);
         t.setDaemon(true);
         t.start();
     }
 
-    // =========================================================================
-    //  getSurfaceY - used by WanderingEnemyEntity
-    // =========================================================================
+    // ── Utilidades de Mundo ───────────────────────────────────────────────────
 
     /**
-     * Returns the Y coordinate of the first solid block surface at (x, z).
-     * Falls back to sea level if the world doesn't provide a height.
+     * Obtiene la altura de la superficie (bloque sólido más alto) en X, Z.
      */
-    public static int getSurfaceY(net.minecraft.world.level.Level level, int x, int z) {
-        return level.getHeight(
-            net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-            x, z);
-    }
-
-    /**
-     * Returns an integer sign usable by light/particle calculations.
-     * Alias of {@link #randomSign()} retained for compatibility with existing callers.
-     */
-    public static int getLightSign() {
-        return randomSign();
+    public static int getSurfaceY(Level level, int x, int z) {
+        return level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
     }
 }

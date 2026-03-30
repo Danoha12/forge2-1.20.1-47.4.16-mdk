@@ -2,11 +2,17 @@ package com.trolmastercard.sexmod.client.renderer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.trolmastercard.sexmod.entity.AllieEntity;
+import com.trolmastercard.sexmod.registry.AnimState;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.phys.Vec2;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 import software.bernie.geckolib.cache.object.GeoBone;
 import software.bernie.geckolib.model.GeoModel;
 
@@ -14,55 +20,32 @@ import java.util.ArrayList;
 import java.util.Collection;
 
 /**
- * AllieBodyRenderer (dv) - Ported from 1.12.2 to 1.20.1.
- *
- * {@link NpcArmRenderer} for Allie-type NPCs with tail-sway and body-bob
- * physics driven by the NPC's owner player movement.
- *
- * Physics fields:
- *   prevX/Z    - owner position last tick          (A/D - C/z)
- *   curX/Z     - owner position this tick           (C/z)
- *   swayX/Z    - computed sway angles               (G/I)
- *   smoothSwayX/Z - exponentially smoothed sway     (F/B)
- *   bodyBob    - current body bob factor            (L)
- *   prevBob    - body bob previous tick             (H)
- *
- * Constants:
- *   SWAY_SCALE   = 8.0      (E)
- *   MAX_SWAY     = 1.68     (K)
- *   BOB_SCALE    = 5.0      (M)
- *
- * 1.12.2 - 1.20.1 changes:
- *   - {@code TickEvent.ClientTickEvent} subscription unchanged (client tick)
- *   - {@code Vec2f.field_189983_j/i} - {@code Vec2.x/y}
- *   - All {@code GlStateManager} - {@code PoseStack}
- *   - {@code be.b(val, min, max)} - {@code MathUtil.clamp(val, min, max)}
- *   - {@code b6.a(from, to, t)} - {@code MathUtil.lerp(from, to, t)}
- *   - {@code e5} - {@code AllieEntity}
- *   - {@code fp.BOW/ATTACK} - {@code AnimState.BOW/ATTACK}
- *   - {@code this.y} (partialTick) - stored each frame
+ * AllieBodyRenderer — Portado a 1.20.1 y enmascarado (SFW).
+ * Renderizador de brazos y cuerpo para NPCs tipo Allie.
+ * Añade físicas de balanceo (cola y cuerpo) basadas en el movimiento del jugador al que sigue.
  */
+@OnlyIn(Dist.CLIENT)
 public class AllieBodyRenderer<T extends AllieEntity> extends NpcArmRenderer<T> {
 
-    // -- Constants -------------------------------------------------------------
+    // ── Constants ─────────────────────────────────────────────────────────────
 
     private static final float SWAY_SCALE = 8.0f;
     private static final float MAX_SWAY   = 1.68f;
     private static final float BOB_SCALE  = 5.0f;
 
-    // -- Shared instance registry (for tick updates) ---------------------------
+    // ── Shared instance registry ──────────────────────────────────────────────
 
     static final Collection<AllieBodyRenderer<?>> ALL_INSTANCES = new ArrayList<>();
 
-    // -- Physics state ---------------------------------------------------------
+    // ── Physics state ─────────────────────────────────────────────────────────
 
-    double curX  = 0, prevX = 0;
-    double curZ  = 0, prevZ = 0;
-    float  swayX = 0, prevSwayX = 0;
-    float  swayZ = 0, prevSwayZ = 0;
-    double bodyBob = 0, prevBob = 0;
+    private double curX  = 0, prevX = 0;
+    private double curZ  = 0, prevZ = 0;
+    private float  swayX = 0, prevSwayX = 0;
+    private float  swayZ = 0, prevSwayZ = 0;
+    private double bodyBob = 0, prevBob = 0;
 
-    /** Partials tick stored by the render call. */
+    /** Partial ticks almacenados por la llamada de renderizado. */
     private float partialTick = 0.0f;
 
     public AllieBodyRenderer(GeoModel<T> model) {
@@ -70,7 +53,7 @@ public class AllieBodyRenderer<T extends AllieEntity> extends NpcArmRenderer<T> 
         ALL_INSTANCES.add(this);
     }
 
-    // -- World-space transform -------------------------------------------------
+    // ── World-space transform ─────────────────────────────────────────────────
 
     @Override
     protected void applyWorldTransforms(PoseStack poseStack) {
@@ -78,11 +61,10 @@ public class AllieBodyRenderer<T extends AllieEntity> extends NpcArmRenderer<T> 
         poseStack.scale(0.7f, 0.7f, 0.7f);
     }
 
-    // -- Item transforms -------------------------------------------------------
+    // ── Item transforms ───────────────────────────────────────────────────────
 
     @Override
-    protected void applyItemTransform(PoseStack poseStack,
-                                      boolean isRightHand, ItemStack stack) {
+    protected void applyItemTransform(PoseStack poseStack, boolean isRightHand, ItemStack stack) {
         super.applyItemTransform(poseStack, isRightHand, stack);
         UseAnim anim = stack.getItem().getUseAnimation(stack);
         if (anim == UseAnim.BOW || anim == UseAnim.BLOCK) return;
@@ -100,8 +82,7 @@ public class AllieBodyRenderer<T extends AllieEntity> extends NpcArmRenderer<T> 
     }
 
     @Override
-    protected void applyThirdPersonTransform(PoseStack poseStack,
-                                              boolean isRightHand, boolean isOffHand) {
+    protected void applyThirdPersonTransform(PoseStack poseStack, boolean isRightHand, boolean isOffHand) {
         super.applyThirdPersonTransform(poseStack, isRightHand, isOffHand);
         if (isRightHand && !isOffHand) {
             poseStack.translate(-0.025, -0.1, -0.1);
@@ -112,100 +93,99 @@ public class AllieBodyRenderer<T extends AllieEntity> extends NpcArmRenderer<T> 
         }
     }
 
-    // -- Physics per-bone -----------------------------------------------------
+    // ── Physics per-bone (GeckoLib 4 update) ─────────────────────────────────
 
     @Override
-    protected void onBoneProcess(String name, GeoBone bone) {
-        if (entityRef == null) return;
-        if (entityRef.isFrozen()) return;
+    protected void onBoneProcess(String name, GeoBone bone, float partialTick) {
+        this.partialTick = partialTick; // Guardar partial tick para los cálculos
+        if (this.entityRef == null || this.entityRef.isNoAi()) return; // isNoAi() reemplaza a isFrozen()
 
         if ("tail".equals(name)) {
             applySwayToBone(bone, 0.0f, 0.0f, 1.0f);
         } else if ("body".equals(name)) {
             applyBodyBobToBone(bone);
-        } else if ("armL".equals(name) && entityRef.getAnimState() != AnimState.BOW) {
+        } else if ("armL".equals(name) && this.entityRef.getAnimState() != AnimState.BOW) {
             applySwayToBone(bone, 0.0f, -0.34906584f, 0.15f);
-        } else if ("armR".equals(name) && entityRef.getAnimState() != AnimState.BOW
-                                       && entityRef.getAnimState() != AnimState.ATTACK) {
+        } else if ("armR".equals(name) && this.entityRef.getAnimState() != AnimState.BOW
+                && this.entityRef.getAnimState() != AnimState.ATTACK) {
             applySwayToBone(bone, 0.0f, 0.34906584f, 0.15f);
         }
     }
 
     /**
-     * Compute the sway angles from owner movement delta, apply to bone.
-     * Corresponds to {@code void a(GeoBone, float, float, float)} in 1.12.2.
+     * Calcula los ángulos de balanceo desde el delta de movimiento del "master" y los aplica al hueso.
      */
-    private void applySwayToBone(GeoBone bone,
-                                  float baseRotX, float baseRotZ, float influence) {
-        double dx = curX - prevX;
-        double dz = curZ - prevZ;
-        double yawRad = Math.toRadians(entityRef.getYRot());
+    private void applySwayToBone(GeoBone bone, float baseRotX, float baseRotZ, float influence) {
+        double dx = this.curX - this.prevX;
+        double dz = this.curZ - this.prevZ;
+        double yawRad = Math.toRadians(this.entityRef.getYRot());
 
-        // Rotate delta into entity-local space
+        // Rotar delta al espacio local de la entidad
         Vec2 local = new Vec2(
                 (float)(dx * Math.cos(yawRad) + dz * Math.sin(yawRad)),
                 (float)(-dx * Math.sin(yawRad) + dz * Math.cos(yawRad))
         );
 
         float rawX = local.x * -SWAY_SCALE;
-        float rawZ = local.y *  SWAY_SCALE;
-        rawX = MathUtil.clamp(rawX, -MAX_SWAY, MAX_SWAY);
-        rawZ = MathUtil.clamp(rawZ, -MAX_SWAY, MAX_SWAY);
+        float rawZ = local.y * SWAY_SCALE;
+        rawX = Mth.clamp(rawX, -MAX_SWAY, MAX_SWAY);
+        rawZ = Mth.clamp(rawZ, -MAX_SWAY, MAX_SWAY);
 
-        // Smooth
-        swayX = (float) MathUtil.lerp(prevSwayX, rawX, partialTick);
-        swayZ = (float) MathUtil.lerp(prevSwayZ, rawZ, partialTick);
+        // Suavizado (Lerp)
+        this.swayX = Mth.lerp(this.partialTick, this.prevSwayX, rawX);
+        this.swayZ = Mth.lerp(this.partialTick, this.prevSwayZ, rawZ);
 
-        bone.setRotX(baseRotX + swayX * influence);
-        bone.setRotZ(baseRotZ + swayZ * influence);
+        // GeckoLib 4 usa updateRotation()
+        bone.updateRotation(baseRotX + this.swayX * influence, bone.getRotY(), baseRotZ + this.swayZ * influence);
     }
 
     /**
-     * Apply body-bob displacement; also updates {@code AllieEntity.bobScale}.
-     * Corresponds to {@code void a(GeoBone)} in 1.12.2.
+     * Aplica el desplazamiento vertical (bob) al cuerpo.
      */
     private void applyBodyBobToBone(GeoBone bone) {
-        double dx = curX - prevX;
-        double dz = curZ - prevZ;
+        double dx = this.curX - this.prevX;
+        double dz = this.curZ - this.prevZ;
         double bobTarget = Math.min(1.0, (Math.abs(dx) + Math.abs(dz)) * BOB_SCALE);
-        float smoothedBob = (float) MathUtil.lerp(prevBob, bobTarget, partialTick);
-        bone.setPosY((float) MathUtil.lerp(5.0, 0.0, smoothedBob));
 
-        entityRef.bobScale = (float) MathUtil.lerp(0.3, 0.0, smoothedBob);
+        float smoothedBob = Mth.lerp(this.partialTick, (float)this.prevBob, (float)bobTarget);
+
+        // GeckoLib 4 usa updatePosition()
+        bone.updatePosition(bone.getPosX(), Mth.lerp(smoothedBob, 5.0f, 0.0f), bone.getPosZ());
+
+        this.entityRef.bobScale = Mth.lerp(smoothedBob, 0.3f, 0.0f);
     }
 
-    // -- Tick update (owner position tracking) --------------------------------
+    // ── Tick update (owner position tracking) ────────────────────────────────
 
-    /**
-     * Called every client tick for all registered instances to advance the
-     * physics simulation by one step.
-     */
     void tickPhysics() {
-        if (entityRef == null) return;
+        if (this.entityRef == null) return;
 
-        // Save smoothed - previous
-        prevSwayX = swayX;
-        prevSwayZ = swayZ;
-        prevBob   = bodyBob;
+        // Guardar estado previo
+        this.prevSwayX = this.swayX;
+        this.prevSwayZ = this.swayZ;
+        this.prevBob   = this.bodyBob;
 
-        // Track owner player
-        if (entityRef.getOwnerUUID() == null) return;
-        var player = entityRef.level().getPlayerByUUID(entityRef.getOwnerUUID());
+        // Seguir al Master Player
+        if (this.entityRef.getMasterUUID() == null) return;
+        var player = this.entityRef.level().getPlayerByUUID(this.entityRef.getMasterUUID());
         if (player == null) return;
 
-        prevX = curX;
-        prevZ = curZ;
-        curX  = player.getX();
-        curZ  = player.getZ();
+        this.prevX = this.curX;
+        this.prevZ = this.curZ;
+        this.curX  = player.getX();
+        this.curZ  = player.getZ();
     }
 
-    // -- Static tick event subscriber -----------------------------------------
+    // ── Static tick event subscriber ─────────────────────────────────────────
 
+    @Mod.EventBusSubscriber(value = Dist.CLIENT)
     public static class TickHandler {
         @SubscribeEvent
-        public void onClientTick(TickEvent.ClientTickEvent event) {
-            for (AllieBodyRenderer<?> renderer : AllieBodyRenderer.ALL_INSTANCES) {
-                renderer.tickPhysics();
+        public static void onClientTick(TickEvent.ClientTickEvent event) {
+            if (event.phase == TickEvent.Phase.END) {
+                for (AllieBodyRenderer<?> renderer : AllieBodyRenderer.ALL_INSTANCES) {
+                    renderer.tickPhysics();
+                }
             }
         }
     }

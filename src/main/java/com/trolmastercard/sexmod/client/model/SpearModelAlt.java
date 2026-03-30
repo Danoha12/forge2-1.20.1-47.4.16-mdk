@@ -1,86 +1,76 @@
-package com.trolmastercard.sexmod.client.model;
+package com.trolmastercard.sexmod.client.model; // Ajusta a tu paquete de modelos
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.trolmastercard.sexmod.client.IBoneAccessor;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.trolmastercard.sexmod.client.model.IBoneAccessor;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
-import net.minecraft.client.model.geom.builders.*;
+import net.minecraft.client.model.geom.builders.CubeDeformation;
+import net.minecraft.client.model.geom.builders.CubeListBuilder;
+import net.minecraft.client.model.geom.builders.LayerDefinition;
+import net.minecraft.client.model.geom.builders.MeshDefinition;
+import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 
 /**
- * SpearModelAlt - ported from bf.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Vanilla-style single-bone prop model for the spear item.
- * Identical geometry to a5/a7 (SpearModel), but registered as its own layer.
- * Implements {@link IBoneAccessor} so bone rotations can be set at runtime.
- *
- * Geometry:
- *   Pivot: (-5, 2.5, 0)
- *   Box:   offset(-2,-6,0), size(2,6,2)
- *
- * In 1.12.2:
- *   - Extended {@code ModelBase} implements {@code at} (IBoneAccessor).
- *   - {@code func_78088_a} - {@link #renderToBuffer(PoseStack,...)}.
- *   - {@code func_78793_a} (setRotationPoint) - {@link PartPose#offset}.
- *   - {@code field_78804_l} (cubeList) - {@link CubeListBuilder}.
- *   - {@code ModelRenderer.field_78795_f/g/h} (rotateAngle*) - {@code part.xRot/yRot/zRot}.
+ * SpearModelAlt — Portado a 1.20.1.
+ * * Modelo "prop" de un solo hueso estilo vainilla para la lanza.
+ * * Geometría idéntica a SpearModel, pero registrado en su propia capa
+ * * y diseñado para una hoja de texturas de 64x32.
  */
 public class SpearModelAlt extends EntityModel<Entity> implements IBoneAccessor {
 
     public static final ModelLayerLocation LAYER =
-        new ModelLayerLocation(new ResourceLocation("sexmod", "spear_alt"), "main");
+            new ModelLayerLocation(new ResourceLocation("sexmod", "spear_alt"), "main");
 
-    private final ModelPart root;
+    // Renombrado para evitar confusión semántica con la raíz real del modelo
+    private final ModelPart altSpearPart;
 
     public SpearModelAlt(ModelPart root) {
-        this.root = root.getChild("bone");
+        this.altSpearPart = root.getChild("bone");
     }
 
-    // =========================================================================
-    //  LayerDefinition factory (call from EntityRenderersEvent.RegisterLayerDefinitions)
-    // =========================================================================
+    // ── Fábrica de Capas (LayerDefinition) ───────────────────────────────────
 
     public static LayerDefinition createBodyLayer() {
         MeshDefinition mesh = new MeshDefinition();
         PartDefinition parts = mesh.getRoot();
 
         parts.addOrReplaceChild("bone",
-            CubeListBuilder.create()
-                .texOffs(0, 0)
-                .addBox(-2.0F, -6.0F, 0.0F, 2, 6, 2),
-            PartPose.offset(-5.0F, 2.5F, 0.0F));
+                CubeListBuilder.create()
+                        .texOffs(0, 0)
+                        // 1.20.1: Forzamos el uso de flotantes explícitos y CubeDeformation
+                        .addBox(-2.0F, -6.0F, 0.0F, 2.0F, 6.0F, 2.0F, new CubeDeformation(0.0F)),
+                PartPose.offset(-5.0F, 2.5F, 0.0F)
+        );
 
+        // La diferencia principal: Usa un lienzo de textura de 64x32
         return LayerDefinition.create(mesh, 64, 32);
     }
 
-    // =========================================================================
-    //  EntityModel overrides
-    // =========================================================================
+    // ── EntityModel ──────────────────────────────────────────────────────────
 
     @Override
     public void setupAnim(Entity entity, float limbSwing, float limbSwingAmount,
                           float ageInTicks, float netHeadYaw, float headPitch) {
-        // No animation - static prop
+        // Objeto estático — sin animaciones por tick
     }
 
     @Override
-    public void renderToBuffer(PoseStack poseStack,
-                               com.mojang.blaze3d.vertex.VertexConsumer buffer,
+    public void renderToBuffer(PoseStack poseStack, VertexConsumer buffer,
                                int packedLight, int packedOverlay,
                                float red, float green, float blue, float alpha) {
-        root.render(poseStack, buffer, packedLight, packedOverlay, red, green, blue, alpha);
+        this.altSpearPart.render(poseStack, buffer, packedLight, packedOverlay, red, green, blue, alpha);
     }
 
-    // =========================================================================
-    //  IBoneAccessor
-    // =========================================================================
+    // ── IBoneAccessor ────────────────────────────────────────────────────────
 
     @Override
     public ModelPart getRootBone() {
-        return root;
+        return this.altSpearPart;
     }
 
     @Override

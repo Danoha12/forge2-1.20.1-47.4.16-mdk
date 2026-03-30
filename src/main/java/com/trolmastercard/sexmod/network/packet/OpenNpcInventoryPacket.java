@@ -1,68 +1,65 @@
 package com.trolmastercard.sexmod.network.packet;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
+import com.trolmastercard.sexmod.world.inventory.NpcInventoryMenuProvider;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
-import net.minecraftforge.server.ServerLifecycleHooks;
 
 import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * OpenNpcInventoryPacket - ported from bo.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * CLIENT-SERVER. Opens the NPC inventory container (GUI 0) for the given player
- * at the NPC's block position.
- *
- * Field mapping:
- *   a = masterUUID, b = playerUUID
- *
- * In 1.12.2:
- *   player.openGui(Main.instance, 0, world, x, y, z) - player.openMenu(provider)
- *   ByteBufUtils.readUTF8String - buf.readUtf()
- *   FMLCommonHandler-getMinecraftServerInstance() - ServerLifecycleHooks.getCurrentServer()
+ * OpenNpcInventoryPacket — Portado a 1.20.1.
+ * * CLIENTE → SERVIDOR.
+ * * Solicita abrir el contenedor de inventario de un NPC específico.
  */
 public class OpenNpcInventoryPacket {
 
-    private final UUID    masterUUID;
-    private final UUID    playerUUID;
-    private final boolean valid;
+    private final UUID npcUUID;
 
-    public OpenNpcInventoryPacket(UUID masterUUID, UUID playerUUID) {
-        this.masterUUID = masterUUID;
-        this.playerUUID = playerUUID;
-        this.valid      = true;
+    public OpenNpcInventoryPacket(UUID npcUUID) {
+        this.npcUUID = npcUUID;
+    }
+
+    // ── Codec (Optimizado) ───────────────────────────────────────────────────
+
+    public static void encode(OpenNpcInventoryPacket msg, FriendlyByteBuf buf) {
+        buf.writeUUID(msg.npcUUID);
     }
 
     public static OpenNpcInventoryPacket decode(FriendlyByteBuf buf) {
-        return new OpenNpcInventoryPacket(
-            UUID.fromString(buf.readUtf()),
-            UUID.fromString(buf.readUtf()));
+        return new OpenNpcInventoryPacket(buf.readUUID());
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(masterUUID.toString());
-        buf.writeUtf(playerUUID.toString());
-    }
+    // ── Manejador (Handler) ──────────────────────────────────────────────────
 
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
+    public static void handle(OpenNpcInventoryPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
+
+        // Solo procesamos en el servidor
+        if (!ctx.getDirection().getReceptionSide().isServer()) return;
+
         ctx.enqueueWork(() -> {
-            if (!valid) { System.out.println("received an invalid message @OpenNpcInventory :("); return; }
-            ServerLifecycleHooks.getCurrentServer().execute(() -> {
-                BaseNpcEntity npc = null;
-                for (BaseNpcEntity c : BaseNpcEntity.getAllActive()) {
-                    if (!c.isRemoved() && c.getMasterUUID().equals(masterUUID)) { npc = c; break; }
+            ServerPlayer player = ctx.getSender();
+            if (player == null) return;
+
+            // Buscamos al NPC en la lista de activos usando su UUID
+            BaseNpcEntity targetNpc = null;
+            for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
+                if (!npc.isRemoved() && npc.getUUID().equals(msg.npcUUID)) {
+                    targetNpc = npc;
+                    break;
                 }
-                if (npc == null) return;
-                net.minecraft.server.level.ServerPlayer player =
-                    ServerLifecycleHooks.getCurrentServer().getPlayerList().getPlayer(playerUUID);
-                if (player == null) return;
-                final BaseNpcEntity finalNpc = npc;
-                player.openMenu(new com.trolmastercard.sexmod.menu.NpcInventoryMenuProvider(finalNpc));
-            });
+            }
+
+            // Si encontramos al NPC, abrimos el menú
+            if (targetNpc != null) {
+                // NpcInventoryMenuProvider debe implementar MenuProvider (antes IInventory)
+                player.openMenu(new NpcInventoryMenuProvider(targetNpc));
+            }
         });
+
         ctx.setPacketHandled(true);
     }
 }

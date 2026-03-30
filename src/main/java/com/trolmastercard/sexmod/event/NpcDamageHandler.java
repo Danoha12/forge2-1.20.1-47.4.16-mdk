@@ -1,92 +1,64 @@
-package com.trolmastercard.sexmod.event;
-import com.trolmastercard.sexmod.PlayerKoboldEntity;
-import com.trolmastercard.sexmod.BaseNpcEntity;
+package com.trolmastercard.sexmod.event; // Ajusta a tu paquete de eventos
 
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
-import com.trolmastercard.sexmod.entity.GalathDamageSource;
+import com.trolmastercard.sexmod.world.damagesource.GalathDamageSource;
 import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;
 import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
 /**
- * NpcDamageHandler - ported from ah.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Handles {@link LivingAttackEvent} on the FORGE event bus to:
- *
- *  1. {@link #onNpcAttacked}: Cancel incoming damage on NPC entities that are
- *     currently in an active sex sequence, or cancel all damage on
- *     {@link PlayerKoboldEntity} instances (they are always invulnerable).
- *
- *  2. {@link #onPlayerAttackedNearNpc}: Cancel damage on players who are
- *     standing too close to their own bound NPC (within 1 block). This
- *     prevents the NPC accidentally hurting the player during sex animations.
- *     Also passes through {@link GalathDamageSource} without cancellation.
- *
- * Original method mapping:
- *   {@code b(LivingAttackEvent)} - {@link #onNpcAttacked(LivingAttackEvent)}
- *   {@code a(LivingAttackEvent)} - {@link #onPlayerAttackedNearNpc(LivingAttackEvent)}
+ * NpcDamageHandler — Portado a 1.20.1.
+ * * Maneja los eventos de ataque para hacer invulnerables a los NPCs durante
+ * * interacciones y proteger al jugador del daño por colisión cercana.
  */
+@Mod.EventBusSubscriber(modid = "sexmod", bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class NpcDamageHandler {
 
-    // =========================================================================
-    //  NPC attack guard
-    // =========================================================================
+    // ── Protección de NPCs ───────────────────────────────────────────────────
 
-    /**
-     * Cancels attacks on NPCs that are:
-     *  - {@link PlayerKoboldEntity}: always invulnerable
-     *  - Any {@link BaseNpcEntity} with an active sex partner
-     *
-     * Void damage ({@code DamageSource.OUT_OF_WORLD}) is never cancelled.
-     *
-     * Equivalent to: {@code ah.b(LivingAttackEvent)}
-     */
     @SubscribeEvent
-    public void onNpcAttacked(LivingAttackEvent event) {
-        if (event.getSource() == event.getEntity().level().damageSources().outOfWorld()) return;
+    public static void onNpcAttacked(LivingAttackEvent event) {
+        // 1.20.1: Usamos .is() con la constante de DamageTypes
+        if (event.getSource().is(DamageTypes.OUT_OF_WORLD)) return;
+
         if (!(event.getEntity() instanceof BaseNpcEntity npc)) return;
 
         if (npc instanceof PlayerKoboldEntity) {
-            // PlayerKoboldEntity is always invulnerable
+            // Los Kobolds de la tribu son inmortales
             event.setCanceled(true);
         } else {
-            // Cancel if NPC is currently in a sex sequence
-            event.setCanceled(npc.getSexTarget() != null);
+            // Cancelar el daño si el NPC tiene un objetivo de interacción activo
+            if (npc.getSexTarget() != null) {
+                event.setCanceled(true);
+            }
         }
     }
 
-    // =========================================================================
-    //  Player proximity guard
-    // =========================================================================
+    // ── Protección de Proximidad del Jugador ─────────────────────────────────
 
-    /**
-     * Cancels damage on players standing within 1 block of their bound NPC.
-     * This prevents the NPC's hitbox from damaging the player during animations.
-     *
-     * {@link GalathDamageSource} is explicitly allowed through (cum drain
-     * should still apply).
-     *
-     * Equivalent to: {@code ah.a(LivingAttackEvent)}
-     */
     @SubscribeEvent
-    public void onPlayerAttackedNearNpc(LivingAttackEvent event) {
+    public static void onPlayerAttackedNearNpc(LivingAttackEvent event) {
         DamageSource source = event.getSource();
 
-        // Allow void damage and galath cum-drain damage
-        if (source == event.getEntity().level().damageSources().outOfWorld()) return;
+        // 1.20.1: Verificación segura del vacío
+        if (source.is(DamageTypes.OUT_OF_WORLD)) return;
+
+        // Mantenemos tu clase custom, pero revisa el "Pro-Tip" abajo
         if (source instanceof GalathDamageSource) return;
 
         if (!(event.getEntity() instanceof Player player)) return;
 
-        // Look up the NPC bound to this player
+        // Buscamos al NPC vinculado a este jugador
         BaseNpcEntity npc = BaseNpcEntity.getByPlayerUUID(player.getUUID());
         if (npc == null) return;
 
-        // Cancel if player is within 1 block of their NPC
-        if (npc.distanceTo((Entity) player) < 1.0F) {
+        // Si el jugador está a menos de 1 bloque de su NPC, cancelamos el daño
+        // (No es necesario castear a Entity, distanceTo lo acepta)
+        if (npc.distanceTo(player) < 1.0F) {
             event.setCanceled(true);
         }
     }

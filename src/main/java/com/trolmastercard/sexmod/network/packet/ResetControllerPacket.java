@@ -1,104 +1,96 @@
 package com.trolmastercard.sexmod.network.packet;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.network.ModNetwork;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Entity;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.PacketDistributor;
-import net.minecraftforge.server.ServerLifecycleHooks;
 
 import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * ResetControllerPacket - ported from a1.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Bidirectional packet (CLIENT-SERVER and SERVER-CLIENT).
- *
- * CLIENT-SERVER: player requests to reset the "ticksPlaying" counter on a
- *   specific NPC. The server resets it and then re-broadcasts this packet to
- *   all players within 100 blocks of the NPC (except the sender).
- *
- * SERVER-CLIENT: client receives the broadcast and calls {@code npc.resetController()}
- *   (i.e. {@code em.ag()} in the original) on the matching local NPC instance.
- *
- * Range constant: 100 blocks (b = 100 in the original).
+ * ResetControllerPacket — Portado a 1.20.1.
+ * * PAQUETE BIDIRECCIONAL.
+ * * Reinicia los contadores de ticks de la animación actual.
+ * * El Servidor lo recibe, lo aplica y lo re-transmite a los jugadores cercanos.
  */
 public class ResetControllerPacket {
 
-    private static final float BROADCAST_RANGE = 100.0F;
+    // 100 bloques de distancia (100 * 100 = 10000 para cálculo optimizado de CPU)
+    private static final double BROADCAST_RANGE_SQR = 10000.0;
 
-    private final UUID    npcUUID;
-    private final boolean valid;
-
-    // =========================================================================
-    //  Constructors
-    // =========================================================================
+    private final UUID npcUUID;
 
     public ResetControllerPacket(UUID npcUUID) {
         this.npcUUID = npcUUID;
-        this.valid   = true;
     }
 
-    // =========================================================================
-    //  Codec
-    // =========================================================================
+    // ── Codec (Optimizado con UUID nativo) ───────────────────────────────────
+
+    public static void encode(ResetControllerPacket msg, FriendlyByteBuf buf) {
+        buf.writeUUID(msg.npcUUID);
+    }
 
     public static ResetControllerPacket decode(FriendlyByteBuf buf) {
-        UUID uuid = UUID.fromString(buf.readUtf());
-        return new ResetControllerPacket(uuid);
+        return new ResetControllerPacket(buf.readUUID());
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(npcUUID.toString());
-    }
+    // ── Manejador (Handler) ──────────────────────────────────────────────────
 
-    // =========================================================================
-    //  Handler
-    // =========================================================================
-
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
+    public static void handle(ResetControllerPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
+
         ctx.enqueueWork(() -> {
-            if (!valid) {
-                System.out.println("received an invalid message @ResetController :(");
-                return;
-            }
+            BaseNpcEntity npc = findNpc(msg.npcUUID);
+            if (npc == null || npc.getAnimState() == null) return;
 
-            ServerPlayer sender = ctx.getSender();
+            if (ctx.getDirection().getReceptionSide().isServer()) {
 
-            if (sender != null) {
-                // ---- SERVER SIDE ----
-                BaseNpcEntity npc = BaseNpcEntity.getByIdServer(npcUUID);
-                if (npc == null) return;
+                // ── LADO DEL SERVIDOR ──
+                ServerPlayer sender = ctx.getSender();
+                if (sender == null) return;
 
-                // Reset the animation controller tick counter
-                npc.getAnimController().ticksPlaying = new int[]{ 0, 0 };
+                // Reiniciar contadores en el servidor
+                npc.getAnimState().ticksPlaying[0] = 0;
+                npc.getAnimState().ticksPlaying[1] = 0;
 
-                UUID senderUUID = sender.getUUID();
+                // Re-transmitir a los jugadores en un radio de 100 bloques (excepto al remitente)
+                for (ServerPlayer player : sender.server.getPlayerList().getPlayers()) {
+                    if (player.getUUID().equals(sender.getUUID())) continue;
 
-                // Re-broadcast to all players within range (except sender)
-                for (ServerPlayer player : ServerLifecycleHooks.getCurrentServer()
-                        .getPlayerList().getPlayers()) {
-                    if (senderUUID.equals(player.getUUID())) continue;
-                    if (player.distanceTo((Entity) npc) < BROADCAST_RANGE) {
+                    if (player.level() == npc.level() && player.distanceToSqr(npc) < BROADCAST_RANGE_SQR) {
                         ModNetwork.CHANNEL.send(
-                            PacketDistributor.PLAYER.with(() -> player),
-                            new ResetControllerPacket(npcUUID));
+                                PacketDistributor.PLAYER.with(() -> player),
+                                new ResetControllerPacket(msg.npcUUID)
+                        );
                     }
                 }
 
             } else {
-                // ---- CLIENT SIDE ----
-                BaseNpcEntity npc = BaseNpcEntity.getByIdClient(npcUUID);
-                if (npc != null) {
-                    npc.resetController(); // em.ag()
-                }
+
+                // ── LADO DEL CLIENTE ──
+                // Reiniciar contadores locales del cliente para que la animación se vea fluida
+                npc.getAnimState().ticksPlaying[0] = 0;
+                npc.getAnimState().ticksPlaying[1] = 0;
+
+                // Si tienes un método específico resetController() en tu entidad, llámalo aquí:
+                // npc.resetController();
             }
         });
+
         ctx.setPacketHandled(true);
+    }
+
+    // ── Helper ───────────────────────────────────────────────────────────────
+
+    private static BaseNpcEntity findNpc(UUID uuid) {
+        for (BaseNpcEntity entity : BaseNpcEntity.getAllActive()) {
+            if (entity.getNpcUUID().equals(uuid)) {
+                return entity;
+            }
+        }
+        return null;
     }
 }

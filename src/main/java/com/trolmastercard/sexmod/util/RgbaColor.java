@@ -1,39 +1,49 @@
 package com.trolmastercard.sexmod.util;
 
+import net.minecraft.util.FastColor;
+import net.minecraft.util.Mth;
+
 /**
- * RgbaColor - ported from bl.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Plain mutable RGBA colour container (int fields).
- *
- * Field mapping:
- *   a = R (red)
- *   d = G (green)
- *   c = B (blue)
- *   b = A (alpha)
- *
- * Note: this is the mutable int-field version.
- * The inner record NpcBoneQuadBuilder.RgbaColor (gv) is a separate
- * immutable record used only inside NpcBoneQuadBuilder.
+ * RgbaColor — Portado a 1.20.1.
+ * * Contenedor mutable para colores RGBA.
+ * * Reemplaza la clase ofuscada 'bl' de la 1.12.2.
  */
 public final class RgbaColor {
 
-    /** Red channel.   Original field: a */
     public int r;
-    /** Alpha channel. Original field: b */
-    public int a;
-    /** Blue channel.  Original field: c */
-    public int b_field;
-    /** Green channel. Original field: d */
     public int g;
+    public int b;
+    public int a;
 
     public RgbaColor(int r, int g, int b, int a) {
-        this.r       = r;
-        this.g       = g;
-        this.b_field = b;
-        this.a       = a;
+        this.r = Mth.clamp(r, 0, 255);
+        this.g = Mth.clamp(g, 0, 255);
+        this.b = Mth.clamp(b, 0, 255);
+        this.a = Mth.clamp(a, 0, 255);
     }
 
+    /**
+     * Empaqueta el color en un entero de 32 bits (ARGB).
+     * Formato estándar usado por los VertexConsumers de la 1.20.1.
+     */
     public int pack() {
-        return ((a & 0xFF) << 24) | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b_field & 0xFF);
+        return FastColor.ARGB32.color(this.a, this.r, this.g, this.b);
+    }
+
+    // ── Helpers para Renderizado (0.0F - 1.0F) ───────────────────────────────
+
+    public float getRedFloat()   { return this.r / 255.0F; }
+    public float getGreenFloat() { return this.g / 255.0F; }
+    public float getBlueFloat()  { return this.b / 255.0F; }
+    public float getAlphaFloat() { return this.a / 255.0F; }
+
+    /** Crea una copia de este color */
+    public RgbaColor copy() {
+        return new RgbaColor(this.r, this.g, this.b, this.a);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("RGBA(%d, %d, %d, %d)", r, g, b, a);
     }
 }

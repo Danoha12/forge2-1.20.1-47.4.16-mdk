@@ -1,10 +1,9 @@
-package com.trolmastercard.sexmod.util;
+package com.trolmastercard.sexmod.util; // Ajusta a tu paquete de utilidades matemáticas
 
 /**
- * Axis-aligned 2-D rectangle (double precision).
- * Ported from f2.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Original field order: d=x1, a=y1, c=x2, b=y2.
+ * Rect2D — Portado a 1.20.1.
+ * * Rectángulo 2D alineado a los ejes (doble precisión).
+ * * Utilizado probablemente para la detección de clics en tus interfaces gráficas (GUIs).
  */
 public class Rect2D {
 
@@ -20,10 +19,15 @@ public class Rect2D {
         this.y2 = y2;
     }
 
-    public double width()  { return x2 - x1; }
-    public double height() { return y2 - y1; }
+    public double width() {
+        return this.x2 - this.x1;
+    }
+
+    public double height() {
+        return this.y2 - this.y1;
+    }
 
     public boolean contains(double x, double y) {
-        return x >= x1 && x <= x2 && y >= y1 && y <= y2;
+        return x >= this.x1 && x <= this.x2 && y >= this.y1 && y <= this.y2;
     }
 }

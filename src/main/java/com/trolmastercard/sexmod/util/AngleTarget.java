@@ -1,26 +1,20 @@
 package com.trolmastercard.sexmod.util;
 
 /**
- * AngleTarget - ported from bm.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
+ * AngleTarget — Portado a 1.20.1 y enmascarado (SFW).
  *
- * Simple value-object holding yaw + pitch (both in radians).
- * Returned by {@link LightUtil#getHeadingTo}.
- *
- * Field mapping (confirmed from source):
- *   c - yaw   (first  constructor arg)
- *   a - pitch (second constructor arg)
- *
- * Static constant: {@code b = new bm(0, 0)} - {@link #ZERO}
+ * Objeto de valor simple que contiene yaw + pitch (ambos en radianes).
+ * Usado comúnmente como retorno por {@link LightUtil#getHeadingTo}.
  */
 public final class AngleTarget {
 
-    /** Identity (both angles zero). Original: {@code static final bm b = new bm(0, 0)}. */
+    /** Identidad (ambos ángulos en cero). */
     public static final AngleTarget ZERO = new AngleTarget(0.0F, 0.0F);
 
-    /** Yaw in radians. Original field: {@code c}. */
+    /** Yaw (Rotación horizontal) en radianes. */
     public final float yaw;
 
-    /** Pitch in radians. Original field: {@code a}. */
+    /** Pitch (Inclinación vertical) en radianes. */
     public final float pitch;
 
     public AngleTarget(float yaw, float pitch) {

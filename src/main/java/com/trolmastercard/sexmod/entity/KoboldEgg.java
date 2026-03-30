@@ -1,6 +1,6 @@
 package com.trolmastercard.sexmod.entity;
 
-import com.trolmastercard.sexmod.ModEntityRegistry;
+import com.trolmastercard.sexmod.registry.ModEntities;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -14,327 +14,260 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.control.MoveControl;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.Vec3;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 
 /**
- * KoboldEgg - Huevo de la Tribu.
- * Portado a 1.20.1.
- * * Entidad similar a un Slime que crece con el tiempo.
- * * Al llegar a su edad máxima, eclosiona y spawnea un KoboldEntity.
- * * Si es destruido, se divide en fragmentos menores.
+ * KoboldEgg — Portado a 1.20.1.
+ * * Una entidad tipo "Slime" que representa un huevo de la tribu en crecimiento.
+ * * Al llegar a su edad máxima (HATCH_TICKS), eclosiona en un KoboldEntity.
+ * * Si es atacado, se divide en huevos más pequeños (lógica de Slime).
  */
 public class KoboldEgg extends Mob {
 
-    // =========================================================================
-    //  Temporizador de Eclosión
-    // =========================================================================
+  public static int HATCH_TICKS = 8400; // 7 Minutos aproximadamente
 
-    /** Ticks necesarios para eclosionar (7 minutos aprox). */
-    public static int HATCH_TICKS = 8400;
+  private static final EntityDataAccessor<Integer> DATA_SIZE =
+          SynchedEntityData.defineId(KoboldEgg.class, EntityDataSerializers.INT);
+  private static final EntityDataAccessor<Integer> DATA_AGE_TICKS =
+          SynchedEntityData.defineId(KoboldEgg.class, EntityDataSerializers.INT);
 
-    // =========================================================================
-    //  Datos Sincronizados
-    // =========================================================================
+  public float squish;
+  public float squishTarget;
+  public float squishOld;
+  private boolean wasOnGround;
 
-    private static final EntityDataAccessor<Integer> DATA_SIZE =
-            SynchedEntityData.defineId(KoboldEgg.class, EntityDataSerializers.INT);
+  public static final List<KoboldEgg> clientEggs = new ArrayList<>();
 
-    private static final EntityDataAccessor<Integer> DATA_AGE_TICKS =
-            SynchedEntityData.defineId(KoboldEgg.class, EntityDataSerializers.INT);
+  public KoboldEgg(EntityType<? extends KoboldEgg> type, Level level) {
+    super(type, level);
+    this.moveControl = new EggMoveControl(this);
+    if (level.isClientSide) clientEggs.add(this);
+  }
 
-    // =========================================================================
-    //  Estado de Animación (Físicas de rebote)
-    // =========================================================================
+  public static AttributeSupplier.Builder createAttributes() {
+    return Mob.createMobAttributes()
+            .add(Attributes.MAX_HEALTH, 1.0)
+            .add(Attributes.MOVEMENT_SPEED, 0.2);
+  }
 
-    public float squish;
-    public float squishTarget;
-    public float squishOld;
-    private boolean wasOnGround;
+  @Override
+  protected void defineSynchedData() {
+    super.defineSynchedData();
+    this.entityData.define(DATA_SIZE, 1);
+    this.entityData.define(DATA_AGE_TICKS, 0);
+  }
 
-    /** Registro global de huevos para búsqueda rápida en cliente. */
-    public static List<KoboldEgg> clientEggs = new ArrayList<>();
+  @Override
+  protected void registerGoals() {
+    this.goalSelector.addGoal(1, new EggFloatGoal(this));
+    this.goalSelector.addGoal(5, new EggHopGoal(this));
+  }
 
-    // =========================================================================
-    //  Constructor y Atributos
-    // =========================================================================
+  // ── Gestión de Tamaño y Eclosión ──────────────────────────────────────────
 
-    public KoboldEgg(EntityType<? extends KoboldEgg> type, Level level) {
-        super(type, level);
-        this.moveControl = new EggMoveControl(this);
+  public void setSize(int size, boolean resetHealth) {
+    this.entityData.set(DATA_SIZE, Mth.clamp(size, 1, 127));
+    this.refreshDimensions();
+    this.reapplyPosition();
+    this.getAttribute(Attributes.MAX_HEALTH).setBaseValue(size * size);
+    this.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.2F + 0.1F * size);
+    if (resetHealth) this.setHealth(this.getMaxHealth());
+  }
+
+  public int getSize() {
+    return this.entityData.get(DATA_SIZE);
+  }
+
+  @Override
+  public EntityDimensions getDimensions(Pose pose) {
+    float s = 0.52F * getSize();
+    return EntityDimensions.scalable(s, s);
+  }
+
+  @Override
+  public void tick() {
+    int age = this.entityData.get(DATA_AGE_TICKS) + 1;
+    this.entityData.set(DATA_AGE_TICKS, age);
+
+    if (this.level().isClientSide) {
+      this.spawnGrowthParticles(age);
+    } else if (age > HATCH_TICKS) {
+      this.hatch();
+      return;
     }
 
-    public static AttributeSupplier.Builder createAttributes() {
-        return Mob.createMobAttributes()
-                .add(Attributes.MAX_HEALTH, 1.0)
-                .add(Attributes.MOVEMENT_SPEED, 0.2);
+    // Lógica de animación de "Squish" (rebote)
+    this.squishOld = this.squish;
+    this.squish += (this.squishTarget - this.squish) * 0.5F;
+
+    super.tick();
+
+    if (this.onGround() && !this.wasOnGround) {
+      this.handleLanding();
+    } else if (!this.onGround() && this.wasOnGround) {
+      this.squishTarget = 1.0F;
     }
 
-    @Override
-    protected void defineSynchedData() {
-        super.defineSynchedData();
-        entityData.define(DATA_SIZE, 1);
-        entityData.define(DATA_AGE_TICKS, 0);
+    this.wasOnGround = this.onGround();
+    this.squishTarget *= 0.6F;
+  }
+
+  private void hatch() {
+    KoboldEntity kobold = ModEntities.KOBOLD.get().create(this.level());
+    if (kobold != null) {
+      kobold.moveTo(this.getX(), this.getY(), this.getZ(), this.getYRot(), 0.0F);
+      this.level().addFreshEntity(kobold);
+      this.playSound(SoundEvents.SLIME_SQUISH, 1.0F, 1.0F);
     }
+    this.remove(RemovalReason.DISCARDED);
+  }
 
-    @Override
-    protected void registerGoals() {
-        this.goalSelector.addGoal(1, new EggFloatGoal(this));
-        this.goalSelector.addGoal(5, new EggHopGoal(this));
+  private void handleLanding() {
+    int size = this.getSize();
+    for (int i = 0; i < size * 8; i++) {
+      float angle = this.random.nextFloat() * ((float)Math.PI * 2F);
+      float radius = this.random.nextFloat() * 0.5F + 0.5F;
+      this.level().addParticle(ParticleTypes.SLIME,
+              this.getX() + Mth.sin(angle) * size * 0.5F * radius,
+              this.getBoundingBox().minY,
+              this.getZ() + Mth.cos(angle) * size * 0.5F * radius,
+              0.0, 0.0, 0.0);
     }
+    this.playSound(this.getJumpSound(), this.getSoundVolume(), this.getSoundPitch());
+    this.squishTarget = -0.5F;
+  }
 
-    // =========================================================================
-    //  Gestión de Tamaño y Dimensiones
-    // =========================================================================
-
-    public void setSize(int sizeTier, boolean resetHP) {
-        this.entityData.set(DATA_SIZE, sizeTier);
-        this.refreshDimensions();
-        this.setPos(getX(), getY(), getZ());
-        this.getAttribute(Attributes.MAX_HEALTH).setBaseValue((double)(sizeTier * sizeTier));
-        this.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.2F + 0.1F * sizeTier);
-        if (resetHP) setHealth(getMaxHealth());
-        this.xpReward = sizeTier;
+  private void spawnGrowthParticles(int age) {
+    if (age > HATCH_TICKS * 0.95) {
+      this.spawnParticle(ParticleTypes.CLOUD, 1);
+    } else if (age > HATCH_TICKS * 0.7 && this.tickCount % 10 == 0) {
+      this.spawnParticle(ParticleTypes.HAPPY_VILLAGER, 1);
     }
+  }
 
-    public int getSize() {
-        return this.entityData.get(DATA_SIZE);
+  private void spawnParticle(ParticleOptions type, int count) {
+    for (int i = 0; i < count; i++) {
+      this.level().addParticle(type,
+              this.getRandomX(0.5D), this.getRandomY(), this.getRandomZ(0.5D),
+              0.0, 0.0, 0.0);
     }
+  }
 
-    public boolean isSmallEgg() {
-        return getSize() <= 1;
+  // ── Sonidos y Muerte ──────────────────────────────────────────────────────
+
+  @Override
+  public void die(DamageSource cause) {
+    int size = this.getSize();
+    if (!this.level().isClientSide && size > 1 && this.getHealth() <= 0.0F) {
+      int splitCount = 2 + this.random.nextInt(3);
+      for (int i = 0; i < splitCount; i++) {
+        KoboldEgg child = new KoboldEgg(ModEntities.KOBOLD_EGG.get(), this.level());
+        child.setSize(size / 2, true);
+        child.moveTo(this.getX(), this.getY() + 0.5, this.getZ(), this.random.nextFloat() * 360.0F, 0.0F);
+        this.level().addFreshEntity(child);
+      }
     }
+    super.die(cause);
+  }
 
-    @Override
-    public EntityDimensions getDimensions(Pose pose) {
-        float s = 0.51000005F * getSize();
-        return EntityDimensions.scalable(s, s);
+  @Override protected SoundEvent getHurtSound(DamageSource source) { return SoundEvents.SLIME_HURT; }
+  @Override protected SoundEvent getDeathSound() { return SoundEvents.SLIME_DEATH; }
+  protected SoundEvent getJumpSound() { return SoundEvents.SLIME_JUMP; }
+
+  // ── Persistencia (NBT) ───────────────────────────────────────────────────
+
+  @Override
+  public void addAdditionalSaveData(CompoundTag nbt) {
+    super.addAdditionalSaveData(nbt);
+    nbt.putInt("Size", this.getSize() - 1);
+    nbt.putInt("AgeTicks", this.entityData.get(DATA_AGE_TICKS));
+  }
+
+  @Override
+  public void readAdditionalSaveData(CompoundTag nbt) {
+    super.readAdditionalSaveData(nbt);
+    this.setSize(nbt.getInt("Size") + 1, false);
+    this.entityData.set(DATA_AGE_TICKS, nbt.getInt("AgeTicks"));
+  }
+
+  // ── Clases Internas de IA (Basadas en Slime) ──────────────────────────────
+
+  static class EggMoveControl extends MoveControl {
+    private float yRotTarget;
+    private int jumpDelay;
+    private final KoboldEgg egg;
+
+    public EggMoveControl(KoboldEgg egg) {
+      super(egg);
+      this.egg = egg;
+      this.yRotTarget = 180.0F * egg.getYRot() / (float)Math.PI;
     }
-
-    // =========================================================================
-    //  Lógica de Tick (Crecimiento y Eclosión)
-    // =========================================================================
 
     @Override
     public void tick() {
-        int age = this.entityData.get(DATA_AGE_TICKS) + 1;
-        this.entityData.set(DATA_AGE_TICKS, age);
+      this.mob.setYRot(this.rotlerp(this.mob.getYRot(), this.yRotTarget, 90.0F));
+      this.mob.yHeadRot = this.mob.getYRot();
+      this.mob.yBodyRot = this.mob.getYRot();
 
-        if (level().isClientSide()) {
-            if (age > HATCH_TICKS * 0.95) {
-                spawnParticle(ParticleTypes.CLOUD);
-            } else if (age > HATCH_TICKS * 0.7 && tickCount % 10 == 0) {
-                spawnParticle(ParticleTypes.HAPPY_VILLAGER);
-            }
-        } else {
-            // Lógica de eclosión
-            if (age > HATCH_TICKS) {
-                // Spawneamos el Kobold final (Asegúrate de que este registro exista)
-                KoboldEntity kobold = new KoboldEntity(ModEntityRegistry.KOBOLD_ENTITY.get(), level());
-                kobold.moveTo(getX(), getY(), getZ(), getYRot(), getXRot());
-                level().addFreshEntity(kobold);
+      if (this.operation != Operation.MOVE_TO) {
+        this.mob.setZza(0.0F);
+        return;
+      }
 
-                this.playSound(SoundEvents.SLIME_SQUISH, 1.0F, 1.0F);
-                this.discard();
-                return;
-            }
+      this.operation = Operation.WAIT;
+      if (this.mob.onGround()) {
+        this.mob.setSpeed((float)(this.speedModifier * this.mob.getAttributeValue(Attributes.MOVEMENT_SPEED)));
+        if (this.jumpDelay-- <= 0) {
+          this.jumpDelay = egg.random.nextInt(100) + 50;
+          this.egg.getJumpControl().jump();
         }
-
-        // Animación de "Squish" heredada de Slime
-        squishOld = squish;
-        squish += (squishTarget - squish) * 0.5F;
-
-        super.tick();
-
-        if (onGround() && !wasOnGround) {
-            int size = getSize();
-            if (!isNoParticles()) {
-                for (int i = 0; i < size * 8; i++) {
-                    float angle = random.nextFloat() * Mth.TWO_PI;
-                    float radius = random.nextFloat() * 0.5F + 0.5F;
-                    float dx = Mth.sin(angle) * size * 0.5F * radius;
-                    float dz = Mth.cos(angle) * size * 0.5F * radius;
-                    level().addParticle(getParticleType(), getX() + dx, getBoundingBox().minY, getZ() + dz, 0.0, 0.0, 0.0);
-                }
-            }
-            playSound(getJumpSound(), getSoundVolume(), getSoundPitch());
-            squishTarget = -0.5F;
-        } else if (!onGround() && wasOnGround) {
-            squishTarget = 1.0F;
-        }
-
-        wasOnGround = onGround();
-        decaySquish();
+      }
     }
 
-    protected void decaySquish() {
-        squishTarget *= 0.6F;
+    public void setDirection(float yRot) { this.yRotTarget = yRot; }
+  }
+
+  static class EggHopGoal extends Goal {
+    private final KoboldEgg egg;
+    private int timer;
+
+    public EggHopGoal(KoboldEgg egg) {
+      this.egg = egg;
+      this.setFlags(EnumSet.of(Flag.MOVE));
     }
 
-    // =========================================================================
-    //  Muerte y División
-    // =========================================================================
+    @Override public boolean canUse() { return egg.onGround() || egg.isInWater(); }
 
     @Override
-    public void die(DamageSource cause) {
-        int size = getSize();
-        if (!level().isClientSide() && size > 1 && getHealth() <= 0.0F) {
-            int splitCount = 2 + random.nextInt(3);
-            for (int i = 0; i < splitCount; i++) {
-                float ox = ((i % 2) - 0.5F) * size / 4.0F;
-                float oz = ((i / 2) - 0.5F) * size / 4.0F;
-                KoboldEgg child = new KoboldEgg(ModEntityRegistry.KOBOLD_EGG.get(), level());
-                if (hasCustomName()) child.setCustomName(getCustomName());
-                child.setSize(size / 2, true);
-                child.moveTo(getX() + ox, getY() + 0.5, getZ() + oz, random.nextFloat() * 360.0F, 0.0F);
-                level().addFreshEntity(child);
-            }
-        }
-        super.die(cause);
+    public void tick() {
+      if (--this.timer <= 0) {
+        this.timer = 40 + egg.getRandom().nextInt(60);
+        ((EggMoveControl)egg.getMoveControl()).setDirection(egg.getRandom().nextInt(360));
+      }
+    }
+  }
+
+  static class EggFloatGoal extends Goal {
+    private final KoboldEgg egg;
+
+    public EggFloatGoal(KoboldEgg egg) {
+      this.egg = egg;
+      this.setFlags(EnumSet.of(Flag.JUMP, Flag.MOVE));
+      ((GroundPathNavigation)egg.getNavigation()).setCanFloat(true);
     }
 
-    // =========================================================================
-    //  Persistencia NBT
-    // =========================================================================
+    @Override public boolean canUse() { return egg.isInWater() || egg.isInLava(); }
 
     @Override
-    public void addAdditionalSaveData(CompoundTag tag) {
-        super.addAdditionalSaveData(tag);
-        tag.putInt("Size", getSize() - 1);
-        tag.putBoolean("wasOnGround", wasOnGround);
-        tag.putInt("ageInTicks", this.entityData.get(DATA_AGE_TICKS));
+    public void tick() {
+      if (egg.getRandom().nextFloat() < 0.8F) egg.getJumpControl().jump();
     }
-
-    @Override
-    public void readAdditionalSaveData(CompoundTag tag) {
-        super.readAdditionalSaveData(tag);
-        int size = tag.getInt("Size");
-        setSize(Math.max(1, size + 1), false);
-        wasOnGround = tag.getBoolean("wasOnGround");
-        this.entityData.set(DATA_AGE_TICKS, tag.getInt("ageInTicks"));
-    }
-
-    // =========================================================================
-    //  Sonidos y Partículas
-    // =========================================================================
-
-    @Override
-    protected SoundEvent getHurtSound(DamageSource source) {
-        return isSmallEgg() ? SoundEvents.SLIME_HURT_SMALL : SoundEvents.SLIME_HURT;
-    }
-
-    @Override
-    protected SoundEvent getDeathSound() {
-        return isSmallEgg() ? SoundEvents.SLIME_DEATH_SMALL : SoundEvents.SLIME_DEATH;
-    }
-
-    protected SoundEvent getJumpSound() {
-        return isSmallEgg() ? SoundEvents.SLIME_JUMP_SMALL : SoundEvents.SLIME_JUMP;
-    }
-
-    @Nullable
-    @Override
-    protected Item getDropItem() {
-        return (getSize() == 1) ? Items.SLIME_BALL : null;
-    }
-
-    protected ParticleOptions getParticleType() {
-        return ParticleTypes.SLIME;
-    }
-
-    private void spawnParticle(ParticleOptions type) {
-        level().addParticle(type,
-                getX() + random.nextFloat() * getBbWidth() * 2.0F - getBbWidth(),
-                getY() + 0.15 + random.nextFloat() * getBbHeight(),
-                getZ() + random.nextFloat() * getBbWidth() * 2.0F - getBbWidth(),
-                0, 0, 0);
-    }
-
-    // =========================================================================
-    //  IA de Movimiento (Clases Internas)
-    // =========================================================================
-
-    static class EggFloatGoal extends Goal {
-        private final KoboldEgg egg;
-        EggFloatGoal(KoboldEgg egg) {
-            this.egg = egg;
-            setFlags(EnumSet.of(Flag.JUMP, Flag.MOVE));
-            ((GroundPathNavigation) egg.getNavigation()).setCanFloat(true);
-        }
-        @Override
-        public boolean canUse() { return egg.isInWater() || egg.isInLava(); }
-        @Override
-        public void tick() {
-            if (egg.getRandom().nextFloat() < 0.8F) egg.getJumpControl().jump();
-            ((EggMoveControl) egg.getMoveControl()).setWantedMovement(1.2);
-        }
-    }
-
-    static class EggHopGoal extends Goal {
-        private final KoboldEgg egg;
-        private float targetAngle;
-        private int countdown;
-        EggHopGoal(KoboldEgg egg) { this.egg = egg; setFlags(EnumSet.of(Flag.MOVE)); }
-        @Override
-        public boolean canUse() { return egg.getTarget() == null && (egg.onGround() || egg.isInWater()); }
-        @Override
-        public void tick() {
-            if (--countdown <= 0) {
-                countdown = 40 + egg.getRandom().nextInt(60);
-                targetAngle = egg.getRandom().nextInt(360);
-            }
-            ((EggMoveControl) egg.getMoveControl()).setDirection(targetAngle);
-        }
-    }
-
-    static class EggMoveControl extends net.minecraft.world.entity.ai.control.MoveControl {
-        private float yRotTarget;
-        private int jumpDelay;
-        private final KoboldEgg egg;
-
-        EggMoveControl(KoboldEgg egg) {
-            super(egg);
-            this.egg = egg;
-            this.yRotTarget = 180.0F * egg.getYRot() / (float)Math.PI;
-        }
-
-        public void setDirection(float yRot) { this.yRotTarget = yRot; }
-        public void setWantedMovement(double speed) { this.speedModifier = speed; this.operation = Operation.MOVE_TO; }
-
-        @Override
-        public void tick() {
-            this.mob.setYRot(this.rotlerp(this.mob.getYRot(), this.yRotTarget, 90.0F));
-            this.mob.yHeadRot = this.mob.getYRot();
-            this.mob.yBodyRot = this.mob.getYRot();
-
-            if (this.operation != Operation.MOVE_TO) {
-                this.mob.setZza(0.0F);
-                return;
-            }
-
-            this.operation = Operation.WAIT;
-            if (this.mob.onGround()) {
-                this.mob.setSpeed((float)(this.speedModifier * this.mob.getAttributeValue(Attributes.MOVEMENT_SPEED)));
-                if (--jumpDelay <= 0) {
-                    jumpDelay = egg.random.nextInt(100) + 50;
-                    this.egg.getJumpControl().jump();
-                } else {
-                    this.egg.xxa = 0.0F;
-                    this.egg.zza = 0.0F;
-                    this.mob.setSpeed(0.0F);
-                }
-            } else {
-                this.mob.setSpeed((float)(this.speedModifier * this.mob.getAttributeValue(Attributes.MOVEMENT_SPEED)));
-            }
-        }
-    }
+  }
 }

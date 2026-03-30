@@ -14,72 +14,55 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * CancelTaskPacket - ported from au.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Sent CLIENT - SERVER when a player clicks to cancel a tribe task at a
- * specific block position.
- *
- * The server:
- *  1. Resolves the tribe UUID from the sending player
- *  2. Finds the task whose target-block set contains {@code pos}
- *  3. Cancels that task via {@link TribeManager#getTaskBlocksAt}
- *  4. Sends a {@link TribeHighlightPacket} back to the player to un-highlight
- *     the blocks that were part of the cancelled task
+ * CancelTaskPacket — Portado a 1.20.1 y optimizado.
+ * * Enviado desde el CLIENTE al SERVIDOR cuando un jugador cancela una tarea de la tribu.
+ * El servidor elimina la tarea del TribeManager y sincroniza visualmente con el cliente.
  */
 public class CancelTaskPacket {
 
-    private final BlockPos pos;
-    private final boolean  valid;
+  private final BlockPos pos;
 
-    // =========================================================================
-    //  Constructors
-    // =========================================================================
+  public CancelTaskPacket(BlockPos pos) {
+    this.pos = pos;
+  }
 
-    public CancelTaskPacket(BlockPos pos) {
-        this.pos   = pos;
-        this.valid = true;
-    }
+  // ── Codificación / Decodificación ─────────────────────────────────────────
 
-    // =========================================================================
-    //  Codec
-    // =========================================================================
+  public static void encode(CancelTaskPacket msg, FriendlyByteBuf buf) {
+    // En 1.20.1 usamos el método nativo para BlockPos, es más eficiente que 3 ints
+    buf.writeBlockPos(msg.pos);
+  }
 
-    public static CancelTaskPacket decode(FriendlyByteBuf buf) {
-        BlockPos pos = new BlockPos(buf.readInt(), buf.readInt(), buf.readInt());
-        return new CancelTaskPacket(pos);
-    }
+  public static CancelTaskPacket decode(FriendlyByteBuf buf) {
+    return new CancelTaskPacket(buf.readBlockPos());
+  }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeInt(pos.getX());
-        buf.writeInt(pos.getY());
-        buf.writeInt(pos.getZ());
-    }
+  // ── Manejador (Handler) ───────────────────────────────────────────────────
 
-    // =========================================================================
-    //  Handler
-    // =========================================================================
+  public static void handle(CancelTaskPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
+    NetworkEvent.Context ctx = ctxSupplier.get();
 
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
-        NetworkEvent.Context ctx = ctxSupplier.get();
-        ctx.enqueueWork(() -> {
-            ServerPlayer player = ctx.getSender();
-            if (player == null) {
-                System.out.println("received an invalid Message @CancelTask :(");
-                return;
-            }
+    // Las tareas solo se gestionan en el servidor
+    ctx.enqueueWork(() -> {
+      ServerPlayer player = ctx.getSender();
+      if (player == null) return;
 
-            UUID tribeId = TribeManager.getTribeIdForMaster(player.getUUID());
-            if (tribeId == null) return;
+      // Obtener el ID de la tribu asociada al jugador
+      UUID tribeId = TribeManager.getTribeIdForMaster(player.getUUID());
+      if (tribeId == null) return;
 
-            // Cancel the task and get back the blocks that were part of it
-            Set<BlockPos> cancelledBlocks = TribeManager.getTaskBlocksAt(tribeId, pos);
-            if (cancelledBlocks.isEmpty()) return;
+      // Cancelar la tarea en la posición indicada y obtener los bloques afectados
+      Set<BlockPos> cancelledBlocks = TribeManager.getTaskBlocksAt(tribeId, msg.pos);
 
-            // Un-highlight those blocks on the client
-            ModNetwork.CHANNEL.send(
+      if (cancelledBlocks != null && !cancelledBlocks.isEmpty()) {
+        // Notificar al cliente para que elimine los resaltados visuales (Highlights)
+        // Usamos TribeHighlightPacket con el flag 'false' para remover
+        ModNetwork.CHANNEL.send(
                 PacketDistributor.PLAYER.with(() -> player),
-                new TribeHighlightPacket(new HashSet<>(cancelledBlocks), false));
-        });
-        ctx.setPacketHandled(true);
-    }
+                new TribeHighlightPacket(new HashSet<>(cancelledBlocks), false)
+        );
+      }
+    });
+    ctx.setPacketHandled(true);
+  }
 }

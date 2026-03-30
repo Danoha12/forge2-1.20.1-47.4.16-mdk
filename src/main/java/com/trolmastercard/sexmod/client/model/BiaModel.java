@@ -1,78 +1,77 @@
 package com.trolmastercard.sexmod.client.model;
 
-import com.trolmastercard.sexmod.BaseNpcEntity;
+import com.trolmastercard.sexmod.entity.BiaEntity;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * BiaModel - Portado a 1.20.1 / GeckoLib 4.
- * * Modelo para la entidad Bia.
- * Incluye soporte para modelos base y con vestimenta, además de
- * decoraciones especiales de hojas en el cabello.
+ * BiaModel — Portado a 1.20.1 / GeckoLib 4 y enmascarado (SFW).
+ *
+ * GeoModel para la entidad NPC "Bia".
+ * Maneja dos archivos de geometría: malla base y malla con vestimenta.
+ * Incluye huesos para decoraciones (hojas) y capas de ropa superior e inferior.
  */
-public class BiaModel extends BaseNpcModel<BaseNpcEntity> {
+public class BiaModel extends BaseNpcModel<BiaEntity> {
 
     @Override
     protected ResourceLocation[] getGeoFiles() {
         return new ResourceLocation[] {
-                // Mantenemos las rutas originales para que cargue tus archivos actuales
-                new ResourceLocation("sexmod", "geo/bia/bianude.geo.json"),
-                new ResourceLocation("sexmod", "geo/bia/biadressed.geo.json")
+                new ResourceLocation("sexmod", "geo/bia/bianude.geo.json"), // Malla base
+                new ResourceLocation("sexmod", "geo/bia/biadressed.geo.json") // Malla vestida
         };
     }
 
     @Override
-    public ResourceLocation getTextureResource(BaseNpcEntity entity) {
+    public ResourceLocation getTextureResource(BiaEntity entity) {
         return new ResourceLocation("sexmod", "textures/entity/bia/bia.png");
     }
 
     @Override
-    public ResourceLocation getModelResource(BaseNpcEntity entity) {
-        // Por defecto cargamos el modelo base
-        return new ResourceLocation("sexmod", "geo/bia/bianude.geo.json");
-    }
-
-    @Override
-    public ResourceLocation getAnimationResource(BaseNpcEntity entity) {
+    public ResourceLocation getAnimationResource(BiaEntity entity) {
         return new ResourceLocation("sexmod", "animations/bia/bia.animation.json");
     }
 
     // =========================================================================
-    //  Mapeado de Huesos (Strings intactos para evitar errores de renderizado)
+    //  Arreglos de huesos (Mapeo exacto a Blockbench)
     // =========================================================================
 
-    /** Casco y protección de cabeza */
-    @Override public String[] getHelmetBones() {
+    @Override
+    public String[] getHelmetBones() {
         return new String[]{ "armorHelmet" };
     }
 
-    /** Decoraciones especiales (Hojas en el cabello) */
-    @Override public String[] getFeatureBones() {
+    /** Huesos decorativos (hojas en el cabello). */
+    @Override
+    public String[] getFeatureBones() {
         return new String[]{ "leaf7", "leaf8" };
     }
 
-    /** Armadura de Pecho y Hombros */
-    @Override public String[] getChestBones() {
+    @Override
+    public String[] getChestBones() {
         return new String[]{ "armorChest", "armorBoobs", "armorShoulderR", "armorShoulderL" };
     }
 
-    /** Detalles del Torso (Incluye el top/bra original) */
-    @Override public String[] getUpperFleshBones() {
+    @Override
+    public String[] getUpperFleshBones() {
+        // "bra" es el nombre del hueso en Blockbench para la ropa superior
         return new String[]{ "bra", "upperBodyR", "upperBodyL" };
     }
 
-    /** Armadura de Piernas y Cadera */
-    @Override public String[] getLowerArmorBones() {
-        return new String[]{ "armorBootyR", "armorBootyL", "armorPantsLowL", "armorPantsLowR",
-                "armorPantsLowR", "armorPantsUpR", "armorPantsUpL", "armorHip" };
+    @Override
+    public String[] getLowerArmorBones() {
+        return new String[]{
+                "armorBootyR", "armorBootyL", "armorPantsLowL", "armorPantsLowR",
+                "armorPantsLowR", "armorPantsUpR", "armorPantsUpL", "armorHip"
+        };
     }
 
-    /** Detalles de la Pelvis y Piernas (Mantenemos los IDs para el .geo) */
-    @Override public String[] getLowerFleshBones() {
+    @Override
+    public String[] getLowerFleshBones() {
+        // "slip" es el nombre del hueso en Blockbench para la ropa inferior
         return new String[]{ "slip", "fleshL", "fleshR", "vagina", "curvesL", "curvesR", "kneeL", "kneeR" };
     }
 
-    /** Calzado */
-    @Override public String[] getShoeBones() {
+    @Override
+    public String[] getShoeBones() {
         return new String[]{ "armorShoesL", "armorShoesR" };
     }
 }

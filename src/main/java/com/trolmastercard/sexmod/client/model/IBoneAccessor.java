@@ -1,27 +1,28 @@
 package com.trolmastercard.sexmod.client.model;
 
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 
 /**
- * IBoneAccessor - replaces the obfuscated {@code at} interface from 1.12.2.
- *
- * Any model that needs to expose bone-rotation helpers and a root-bone accessor
- * should implement this interface.
+ * IBoneAccessor — Portado a 1.20.1.
+ * * Usada por los modelos estáticos (Manos, Huevos, Props)
+ * * para exponer su hueso principal al Renderizador y aplicarles rotación dinámica.
  */
+@OnlyIn(Dist.CLIENT)
 public interface IBoneAccessor {
 
     /**
-     * Sets the local-space rotation angles on the given {@link ModelPart}.
-     *
-     * @param part  the part to rotate
-     * @param xRot  X rotation in radians
-     * @param yRot  Y rotation in radians
-     * @param zRot  Z rotation in radians
+     * Aplica los ángulos de rotación en espacio local al ModelPart dado.
      */
-    void setBoneRotation(ModelPart part, float xRot, float yRot, float zRot);
+    default void setBoneRotation(ModelPart part, float xRot, float yRot, float zRot) {
+        part.xRot = xRot;
+        part.yRot = yRot;
+        part.zRot = zRot;
+    }
 
     /**
-     * Returns the root (or primary) bone of the model.
+     * Retorna el hueso principal (raíz) del modelo.
      */
-    ModelPart getRootBone();
+    ModelPart getBoneRoot();
 }

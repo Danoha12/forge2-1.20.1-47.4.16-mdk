@@ -1,26 +1,18 @@
-package com.trolmastercard.sexmod.registry;
+package com.trolmastercard.sexmod.registry; // Te recomiendo moverlo a un paquete de registros
 
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.storage.loot.BuiltInLootTables;
 
 /**
- * ModLootTables - ported from dz.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Registers and holds {@link ResourceLocation}s for the mod's custom loot tables.
- *
- * 1.12.2 - 1.20.1 migrations:
- *   - LootTableList.func_186375_a - BuiltInLootTables.register (returns the same RL)
- *     In 1.20.1 loot tables are discovered automatically from data packs;
- *     BuiltInLootTables.register() just records the location in the built-in set.
+ * ModLootTables — Portado a 1.20.1.
+ * * En 1.20.1 ya no se usa BuiltInLootTables.register() para los mods.
+ * * Las tablas se cargan automáticamente desde data/sexmod/loot_tables/.
+ * * Solo necesitamos mantener las referencias estáticas para usarlas en el código.
  */
 public class ModLootTables {
 
-    public static final ResourceLocation JENNY = register("jenny");
-    public static final ResourceLocation ELLIE = register("ellie");
-    public static final ResourceLocation SLIME  = register("slime");
-    public static final ResourceLocation BIA    = register("bia");
+    public static final ResourceLocation JENNY = new ResourceLocation("sexmod", "jenny");
+    public static final ResourceLocation ELLIE = new ResourceLocation("sexmod", "ellie");
+    public static final ResourceLocation SLIME = new ResourceLocation("sexmod", "slime");
+    public static final ResourceLocation BIA   = new ResourceLocation("sexmod", "bia");
 
-    private static ResourceLocation register(String name) {
-        return BuiltInLootTables.register(new ResourceLocation("sexmod", name));
-    }
 }

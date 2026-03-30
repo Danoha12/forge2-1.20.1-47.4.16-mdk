@@ -1,272 +1,196 @@
 package com.trolmastercard.sexmod.entity;
 
+import com.trolmastercard.sexmod.client.gui.HornyMeterOverlay;
 import com.trolmastercard.sexmod.registry.AnimState;
-import com.trolmastercard.sexmod.BaseNpcEntity;
-import net.minecraft.client.Minecraft;
-import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
+import com.trolmastercard.sexmod.registry.ModSounds;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
-import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Monster;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Arrow;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.event.entity.ProjectileImpactEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
 import software.bernie.geckolib.animatable.GeoEntity;
 import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
-import software.bernie.geckolib.core.animation.AnimatableManager;
-import software.bernie.geckolib.core.animation.AnimationController;
-import software.bernie.geckolib.core.animation.AnimationState;
+import software.bernie.geckolib.core.animation.*;
 import software.bernie.geckolib.core.object.PlayState;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
-public class MangleLieEntity extends BaseNpcEntity {
+/**
+ * MangleLieEntity — Portado a 1.20.1.
+ * * Entidad de soporte vinculada a Galath.
+ * * Maneja combate a distancia y estados de interacción múltiple.
+ */
+public class MangleLieEntity extends BaseNpcEntity implements GeoEntity {
 
-    public static final String MOMMY_TAG = "sexmod:mommy";
+    public static final float ARROW_FIRE_TICKS = 28.0F;
 
-    // Constantes de gameplay
-    public static final float ANIM_DURATION_TICKS = 60.0F;
-    public static final float ARROW_FIRE_TICKS   = 28.0F;
-    public static final float WALK_SPEED         = 0.65F;
-    public static final float MAX_HP             = 700.0F;
+    // ── Sincronización de Datos ──────────────────────────────────────────────
+    public static final EntityDataAccessor<String> MOMMY_UUID = SynchedEntityData.defineId(MangleLieEntity.class, EntityDataSerializers.STRING);
+    public static final EntityDataAccessor<Boolean> IS_ON_BACK = SynchedEntityData.defineId(MangleLieEntity.class, EntityDataSerializers.BOOLEAN);
+    public static final EntityDataAccessor<Integer> TARGET_ID = SynchedEntityData.defineId(MangleLieEntity.class, EntityDataSerializers.INT);
+    public static final EntityDataAccessor<Boolean> THREESOME_M = SynchedEntityData.defineId(MangleLieEntity.class, EntityDataSerializers.BOOLEAN);
+    public static final EntityDataAccessor<Boolean> THREESOME_Y = SynchedEntityData.defineId(MangleLieEntity.class, EntityDataSerializers.BOOLEAN);
 
-    // Data Sync - Refactorizado a tipos nativos
-    public static final EntityDataAccessor<Optional<UUID>> DATA_MOMMY_UUID =
-            SynchedEntityData.defineId(MangleLieEntity.class, EntityDataSerializers.OPTIONAL_UUID);
-    public static final EntityDataAccessor<Boolean> DATA_IS_ON_BACK =
-            SynchedEntityData.defineId(MangleLieEntity.class, EntityDataSerializers.BOOLEAN);
-    public static final EntityDataAccessor<Integer> DATA_TARGET_ID =
-            SynchedEntityData.defineId(MangleLieEntity.class, EntityDataSerializers.INT);
-    public static final EntityDataAccessor<Long> DATA_SEX_START_TIME =
-            SynchedEntityData.defineId(MangleLieEntity.class, EntityDataSerializers.LONG);
-    public static final EntityDataAccessor<Boolean> DATA_SCARED =
-            SynchedEntityData.defineId(MangleLieEntity.class, EntityDataSerializers.BOOLEAN);
-
-    @Nullable private UUID pendingMommyUUID = null;
-    private boolean wasWild = true;
-    private boolean shouldDespawn = false;
     private boolean arrowFired = false;
+    private long lastShotTime = -1L;
 
-    // Flags de estado
-    public float headYaw, headPitch;
-    private boolean threesomeNFlag, threesomeYFlag, threesomeMFlag;
-    public int cumStageIndex = 2;
+    private final AnimatableInstanceCache animCache = GeckoLibUtil.createInstanceCache(this);
 
-    private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
-
-    public MangleLieEntity(EntityType<? extends MangleLieEntity> type, Level world) {
-        super(type, world);
+    public MangleLieEntity(EntityType<? extends MangleLieEntity> type, Level level) {
+        super(type, level);
     }
 
     @Override
     protected void defineSynchedData() {
         super.defineSynchedData();
-        this.entityData.define(DATA_MOMMY_UUID, Optional.empty());
-        this.entityData.define(DATA_IS_ON_BACK, false);
-        this.entityData.define(DATA_TARGET_ID, -1);
-        this.entityData.define(DATA_SEX_START_TIME, -1L);
-        this.entityData.define(DATA_SCARED, false);
+        this.entityData.define(MOMMY_UUID, "");
+        this.entityData.define(IS_ON_BACK, false);
+        this.entityData.define(TARGET_ID, -1);
+        this.entityData.define(THREESOME_M, false);
+        this.entityData.define(THREESOME_Y, false);
     }
 
-    // -- Getters y Setters Optimizados --
+    // ── Lógica de Vinculación (Mommy Galath) ─────────────────────────────────
 
-    public void setOnBack(boolean value) { this.entityData.set(DATA_IS_ON_BACK, value); }
-    public boolean isOnBack() { return this.entityData.get(DATA_IS_ON_BACK); }
-
-    @Nullable
-    public UUID getMommyUUID() { return this.entityData.get(DATA_MOMMY_UUID).orElse(null); }
+    /** Requerido por CustomModelSavedData para saber quién es el dueño del asiento */
+    public UUID getSeatMasterUUID() {
+        UUID mommy = getMommyUUID();
+        return mommy != null ? mommy : this.getMasterUUID();
+    }
 
     public void setMommyUUID(@Nullable UUID uuid) {
-        this.entityData.set(DATA_MOMMY_UUID, Optional.ofNullable(uuid));
-    }
-
-    public long getSexStartTime() { return this.entityData.get(DATA_SEX_START_TIME); }
-
-    public void setSexStartTime(long time) {
-        this.entityData.set(DATA_SEX_START_TIME, time);
-        this.arrowFired = false;
+        this.entityData.set(MOMMY_UUID, uuid == null ? "" : uuid.toString());
     }
 
     @Nullable
-    public GalathEntity getMommy(boolean serverSide) {
+    public UUID getMommyUUID() {
+        String s = this.entityData.get(MOMMY_UUID);
+        return s.isEmpty() ? null : UUID.fromString(s);
+    }
+
+    public GalathEntity getMommy() {
         UUID uuid = getMommyUUID();
         if (uuid == null) return null;
-        BaseNpcEntity npc = serverSide ? BaseNpcEntity.getByUUIDServer(uuid) : BaseNpcEntity.getByUUIDClient(uuid);
-        return (npc instanceof GalathEntity galath) ? galath : null;
+        Entity e = this.level().isClientSide() ?
+                ((net.minecraft.client.multiplayer.ClientLevel)this.level()).getEntity(this.getId()) : // Fallback cliente
+                ((ServerLevel)this.level()).getEntity(uuid);
+        return (e instanceof GalathEntity g) ? g : null;
     }
 
-    // -- Lógica de Servidor --
+    public boolean isOnBack() { return this.entityData.get(IS_ON_BACK); }
+    public void setOnBack(boolean val) { this.entityData.set(IS_ON_BACK, val); }
+
+    // ── Lógica de Combate y Soporte ──────────────────────────────────────────
 
     @Override
-    public void baseTick() {
-        if (this.shouldDespawn) {
-            this.discard();
+    public void aiStep() {
+        super.aiStep();
+        if (this.level().isClientSide()) return;
+
+        if (isOnBack()) {
+            handleCombatSupport();
+        } else {
+            searchForMommy();
+        }
+    }
+
+    private void handleCombatSupport() {
+        Entity target = getTargetEntity();
+        if (target == null || !target.isAlive()) {
+            findTarget();
+        } else {
+            tryShoot(target);
+        }
+    }
+
+    private void tryShoot(Entity target) {
+        if (arrowFired) {
+            if (this.level().getGameTime() > lastShotTime + 60) arrowFired = false; // Cooldown
             return;
         }
-        applyQueuedMommy();
-        super.baseTick();
 
-        if (!this.level().isClientSide) {
-            updateTamedState();
-            tryFindMommy(); // Optimizada internamente
-            checkMommyStatus();
-            handleCombatLogic();
+        GalathEntity mommy = getMommy();
+        if (mommy != null && this.level().getGameTime() % 40 == 0) {
+            Arrow arrow = new Arrow(this.level(), this);
+            Vec3 pos = mommy.position().add(0, 3.0, 0); // Dispara desde arriba de Galath
+            arrow.setPos(pos.x, pos.y, pos.z);
+
+            Vec3 dir = target.position().add(0, target.getEyeHeight(), 0).subtract(pos).normalize();
+            arrow.setDeltaMovement(dir.scale(2.5));
+
+            this.level().addFreshEntity(arrow);
+            this.playSound(SoundEvents.ARROW_SHOOT, 1.0F, 1.0F);
+            this.arrowFired = true;
+            this.lastShotTime = this.level().getGameTime();
         }
     }
 
-    private void updateTamedState() {
-        boolean tamed = isOnBack();
-        this.setInvulnerable(tamed);
-        this.noPhysics = tamed;
-    }
-
-    /** Busca una Mommy cercana cada 1 segundo para ahorrar CPU */
-    private void tryFindMommy() {
-        if (isOnBack() || getMommyUUID() != null || this.tickCount % 20 != 0) return;
-
-        AABB box = this.getBoundingBox().inflate(15.0D);
-        List<GalathEntity> candidates = this.level().getEntitiesOfClass(GalathEntity.class, box,
-                g -> !g.isRemoved() && g.getMang(true) == null && g.onGround());
-
-        if (!candidates.isEmpty()) {
-            GalathEntity target = candidates.get(0);
-            setAnimState(AnimState.RUN);
-            this.getNavigation().moveTo(target, 0.65D);
-        } else if (getAnimState() == AnimState.RUN) {
-            setAnimState(null);
-            this.getNavigation().stop();
+    private void findTarget() {
+        AABB area = this.getBoundingBox().inflate(15);
+        List<Monster> enemies = this.level().getEntitiesOfClass(Monster.class, area);
+        if (!enemies.isEmpty()) {
+            this.entityData.set(TARGET_ID, enemies.get(0).getId());
         }
     }
-
-    private void handleCombatLogic() {
-        if (!isOnBack()) return;
-
-        Entity target = getTargetEntity();
-        if (target == null) {
-            findNewTarget();
-        } else {
-            if (isTargetInvalid(target, getMommy(true))) {
-                setTarget(-1);
-            } else {
-                tryShootArrow();
-                clearTargetAfterTimeout();
-            }
-        }
-    }
-
-    private void tryShootArrow() {
-        long startTime = getSexStartTime();
-        if (startTime == -1L || (float)(this.level().getGameTime() - startTime) < ARROW_FIRE_TICKS || arrowFired) return;
-
-        GalathEntity mommy = getMommy(true);
-        Entity target = getTargetEntity();
-        if (mommy == null || target == null) return;
-
-        Arrow arrow = new Arrow(this.level(), (LivingEntity) this);
-        Vec3 firePos = mommy.position().add(0, 3.5D, 0);
-        arrow.setPos(firePos.x, firePos.y, firePos.z);
-        Vec3 dir = target.position().subtract(firePos).normalize();
-        arrow.setDeltaMovement(dir.scale(4.0D));
-
-        BaseNpcEntity.playSoundForNpc(mommy, SoundEvents.ARROW_SHOOT, true);
-        this.level().addFreshEntity(arrow);
-        this.arrowFired = true;
-    }
-
-    // -- Control de Animaciones --
-
-    @Override
-    public void setAnimState(AnimState state) {
-        if (getAnimState() == AnimState.THREESOME_CUM &&
-                (state == AnimState.THREESOME_FAST || state == AnimState.THREESOME_SLOW)) return;
-
-        if (!this.level().isClientSide && state == AnimState.THREESOME_CUM) {
-            GalathOwnershipData.recordCumTime(getOwnerUUID(), this.level().getGameTime());
-        }
-        super.setAnimState(state);
-    }
-
-    // -- Persistencia (NBT) --
-
-    @Override
-    public void addAdditionalSaveData(CompoundTag tag) {
-        super.addAdditionalSaveData(tag);
-        if (getMommyUUID() != null) tag.putUUID(MOMMY_TAG, getMommyUUID());
-        tag.putBoolean("sexmod:iswild", this.wasWild);
-        if (this.shouldDespawn) tag.putBoolean("sexmod:despawned", true);
-    }
-
-    @Override
-    public void readAdditionalSaveData(CompoundTag tag) {
-        super.readAdditionalSaveData(tag);
-        if (tag.hasUUID(MOMMY_TAG)) this.pendingMommyUUID = tag.getUUID(MOMMY_TAG);
-        this.wasWild = tag.getBoolean("sexmod:iswild");
-        this.shouldDespawn = tag.getBoolean("sexmod:despawned");
-    }
-
-    // -- Métodos Requeridos GeckoLib --
-
-    @Override
-    public void registerControllers(AnimatableManager.ControllerRegistrar registrar) {
-        registrar.add(new AnimationController<>(this, "face", 0, state -> {
-            if (this.entityData.get(DATA_TARGET_ID) == -1) return PlayState.STOP;
-            return playAnimation("animation.manglelie.angry_face", true, state);
-        }));
-
-        registrar.add(new AnimationController<>(this, "action", 0, state -> {
-            AnimState as = getAnimState();
-            if (as == AnimState.NULL) {
-                if (isOnBack()) return PlayState.STOP;
-                String anim = this.entityData.get(DATA_SCARED) ? "animation.manglelie.scared_run" :
-                        (this.walkDist > this.walkDistO ? "animation.manglelie.walk" : "animation.manglelie.idle");
-                return playAnimation(anim, true, state);
-            }
-            // ... resto de lógica de switch simplificada ...
-            return PlayState.CONTINUE;
-        }));
-    }
-
-    @Override
-    public AnimatableInstanceCache getAnimatableInstanceCache() { return geoCache; }
 
     @Nullable
     public Entity getTargetEntity() {
-        int id = this.entityData.get(DATA_TARGET_ID);
+        int id = this.entityData.get(TARGET_ID);
         return id == -1 ? null : this.level().getEntity(id);
     }
 
-    private void setTarget(int entityId) {
-        this.entityData.set(DATA_TARGET_ID, entityId);
-        setSexStartTime(entityId == -1 ? -1L : this.level().getGameTime());
-    }
-
-    private void checkMommyStatus() {
-        if (getMommyUUID() != null) this.wasWild = false;
-        if (this.wasWild) return;
-
-        GalathEntity mommy = getMommy(true);
-        if (mommy == null || mommy.isRemoved()) {
-            this.discard();
+    private void searchForMommy() {
+        if (this.tickCount % 20 == 0) {
+            this.level().getEntitiesOfClass(GalathEntity.class, this.getBoundingBox().inflate(10)).stream()
+                    .filter(g -> g.getMangleLie() == null)
+                    .findFirst()
+                    .ifPresent(g -> {
+                        this.getNavigation().moveTo(g, 0.5);
+                        if (this.distanceTo(g) < 1.5) {
+                            this.setOnBack(true);
+                            g.setMangleLie(this);
+                            this.setAnimStateFiltered(AnimState.RIDE_MOMMY_HEAD);
+                        }
+                    });
         }
     }
 
+    // ── GeckoLib 4: Controladores ────────────────────────────────────────────
+
     @Override
-    public String getNpcName() { return "Manglelie"; }
+    public void registerControllers(AnimatableManager.ControllerRegistrar registrar) {
+        registrar.add(new AnimationController<>(this, "main", 5, state -> {
+            AnimState as = getAnimState();
+
+            if (isOnBack()) {
+                if (as == AnimState.THREESOME_SLOW) {
+                    String anim = this.entityData.get(THREESOME_M) ? "animation.shared.double_holding_back" : "animation.shared.double_holding_slow";
+                    return state.setAndContinue(RawAnimation.begin().thenLoop(anim));
+                }
+                return state.setAndContinue(RawAnimation.begin().thenLoop("animation.manglelie.sit_on_galath"));
+            }
+
+            if (state.isMoving()) return state.setAndContinue(RawAnimation.begin().thenLoop("animation.manglelie.walk"));
+            return state.setAndContinue(RawAnimation.begin().thenLoop("animation.manglelie.idle"));
+        }).setSoundKeyframeHandler(event -> {
+            if (event.getKeyframeData().getSound().equals("pound")) {
+                this.playSound(ModSounds.MISC_POUNDING.get(), 1.0F, 1.0F);
+                if (this.level().isClientSide()) HornyMeterOverlay.addValue(0.02);
+            }
+        }));
+    }
+
+    @Override public void triggerAction(String action, UUID playerId) {}
+    @Override public Vec3 getBonePosition(String boneName) { return this.position().add(0, 0.5, 0); }
+    @Override public AnimatableInstanceCache getAnimatableInstanceCache() { return animCache; }
 }

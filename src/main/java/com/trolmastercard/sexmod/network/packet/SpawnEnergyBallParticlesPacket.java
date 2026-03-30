@@ -1,72 +1,77 @@
 package com.trolmastercard.sexmod.network.packet;
 
-import com.trolmastercard.sexmod.entity.EnergyBallEntity;
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
+import com.trolmastercard.sexmod.entity.GalathEntity;
+import com.trolmastercard.sexmod.item.GalathCoinItem;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkEvent;
 
+import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * SpawnEnergyBallParticlesPacket - ported from bv.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * SERVER - CLIENT.
- *
- * Two modes controlled by {@code isExplosion}:
- *   true  - ring of smoke particles around the position ({@link EnergyBallEntity#spawnRingParticles})
- *   false - dragon-breath burst + shatter sound ({@link EnergyBallEntity#spawnDeathParticles})
- *
- * Field mapping:
- *   a = pos          (Vec3d - Vec3)
- *   c = isExplosion  (boolean - ring vs burst)
- *   b = initialized  (fromBytes guard)
- *
- * In 1.12.2:
- *   IMessage / IMessageHandler - FriendlyByteBuf encode/decode + handle(Supplier<NetworkEvent.Context>)
- *   Vec3d.field_72450_a/b/c    - Vec3.x/y/z
- *   param1MessageContext.side  - ctx.get().getDirection().getReceptionSide()
- *   c4.a(vec3d) / c4.c(vec3d) - EnergyBallEntity.spawnRingParticles / spawnDeathParticles
+ * SpawnEnergyBallParticlesPacket — Portado a 1.20.1.
+ * * SERVIDOR -> CLIENTE.
+ * * Invoca el efecto de partículas de energía en el cliente usando GalathCoinItem.
  */
 public class SpawnEnergyBallParticlesPacket {
 
-    final Vec3 pos;
-    final boolean isExplosion;
+    private final UUID npcUUID;
+    private final UUID targetUUID;
 
-    public SpawnEnergyBallParticlesPacket(Vec3 pos, boolean isExplosion) {
-        this.pos         = pos;
-        this.isExplosion = isExplosion;
+    public SpawnEnergyBallParticlesPacket(UUID npcUUID, UUID targetUUID) {
+        this.npcUUID = npcUUID;
+        this.targetUUID = targetUUID;
     }
 
-    // =========================================================================
-    //  Encode / Decode
-    // =========================================================================
+    // ── Codec (Optimizado sin Strings) ───────────────────────────────────────
 
     public static void encode(SpawnEnergyBallParticlesPacket msg, FriendlyByteBuf buf) {
-        buf.writeDouble(msg.pos.x);
-        buf.writeDouble(msg.pos.y);
-        buf.writeDouble(msg.pos.z);
-        buf.writeBoolean(msg.isExplosion);
+        // Usamos un boolean como "seguro" por si el UUID es nulo
+        buf.writeBoolean(msg.npcUUID != null);
+        if (msg.npcUUID != null) buf.writeUUID(msg.npcUUID);
+
+        buf.writeBoolean(msg.targetUUID != null);
+        if (msg.targetUUID != null) buf.writeUUID(msg.targetUUID);
     }
 
     public static SpawnEnergyBallParticlesPacket decode(FriendlyByteBuf buf) {
-        Vec3 pos = new Vec3(buf.readDouble(), buf.readDouble(), buf.readDouble());
-        boolean explosion = buf.readBoolean();
-        return new SpawnEnergyBallParticlesPacket(pos, explosion);
+        UUID npc = buf.readBoolean() ? buf.readUUID() : null;
+        UUID target = buf.readBoolean() ? buf.readUUID() : null;
+        return new SpawnEnergyBallParticlesPacket(npc, target);
     }
 
-    // =========================================================================
-    //  Handle  (CLIENT side)
-    // =========================================================================
+    // ── Manejador (Handler) ──────────────────────────────────────────────────
 
     public static void handle(SpawnEnergyBallParticlesPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
-        ctx.enqueueWork(() -> {
-            if (msg.isExplosion) {
-                EnergyBallEntity.spawnRingParticles(msg.pos);
-            } else {
-                EnergyBallEntity.spawnDeathParticles(msg.pos);
-            }
-        });
+
+        // Verificamos que realmente estemos en el cliente antes de encolar el trabajo
+        if (ctx.getDirection().getReceptionSide().isClient()) {
+            ctx.enqueueWork(() -> handleClient(msg));
+        }
         ctx.setPacketHandled(true);
+    }
+
+    /**
+     * Lógica aislada para el Cliente.
+     * Evita que el Servidor Dedicado crashee al intentar cargar clases de Render/Partículas.
+     */
+    private static void handleClient(SpawnEnergyBallParticlesPacket msg) {
+        if (msg.npcUUID == null) {
+            System.out.println("[SexMod] Error: npcUUID vino nulo en el paquete de partículas.");
+            return;
+        }
+
+        // Resolvemos el NPC en el mundo del cliente
+        BaseNpcEntity npc = BaseNpcEntity.getByIdClient(msg.npcUUID);
+
+        if (!(npc instanceof GalathEntity galath)) {
+            System.out.println("[SexMod] Error: La entidad no existe o no es Galath.");
+            return;
+        }
+
+        // Disparamos las partículas
+        GalathCoinItem.spawnEnergyBallParticles(msg.targetUUID, galath);
     }
 }

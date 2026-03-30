@@ -1,187 +1,154 @@
 package com.trolmastercard.sexmod.client.event;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.trolmastercard.sexmod.registry.AnimState;
-import com.trolmastercard.sexmod.BaseNpcEntity;
+import com.trolmastercard.sexmod.client.CameraController;
+import com.trolmastercard.sexmod.entity.AnimState;
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.NpcStateAccessor;
-import com.trolmastercard.sexmod.util.MathUtil; // Asegúrate de que esta ruta sea correcta
-
+import com.trolmastercard.sexmod.util.MathUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.world.entity.Entity;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.RenderHandEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.event.RenderPlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 
-import java.util.ConcurrentModificationException;
 import java.util.UUID;
 
 /**
- * NpcRenderEventHandler - ported to 1.20.1.
+ * NpcRenderEventHandler — Portado a 1.20.1.
+ * * Maneja el suavizado de cámara y renderizado especial de estados (Pick Up / Throw).
  */
-@Mod.EventBusSubscriber(modid = "sexmod", bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@OnlyIn(Dist.CLIENT)
 public class NpcRenderEventHandler {
 
-    // Variables extraídas para el suavizado de cámara (ya que Vanilla Camera no las tiene)
-    private static float yawVelocity = 0;
-    private static float smoothYawVelocity = 0;
-    private static float prevYaw = 0;
-
-    private static float pitchVelocity = 0;
-    private static float smoothPitchVelocity = 0;
-    private static float prevPitch = 0;
-
     // =========================================================================
-    //  1. Camera smooth tracking
+    //  1. Seguimiento Suave de Cámara
     // =========================================================================
 
     @SubscribeEvent
-    public static void onRenderWorldCameraSmooth(RenderLevelStageEvent event) {
+    public void onRenderWorldCameraSmooth(RenderLevelStageEvent event) {
+        // Ejecutamos después de que las entidades se hayan procesado
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) return;
 
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        if (player == null) return;
-
-        // Solo activo en primera persona
-        if (mc.options.getCameraType().ordinal() != 0) return;
+        if (player == null || !mc.options.getCameraType().isFirstPerson()) return;
 
         UUID playerUUID = player.getUUID();
         BaseNpcEntity bound = null;
 
-        try {
-            for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
-                if (npc == null || npc.isRemoved() || !npc.level().isClientSide()) continue;
-                if (!(npc instanceof NpcStateAccessor state)) continue;
+        // Búsqueda segura del NPC vinculado al jugador
+        for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
+            if (npc != null && !npc.isRemoved() && npc instanceof NpcStateAccessor state) {
                 if (playerUUID.equals(state.getSexPartnerUUID())) {
                     bound = npc;
                     break;
                 }
             }
-        } catch (ConcurrentModificationException ignored) {}
+        }
 
         if (bound == null) return;
 
         float partialTick = event.getPartialTick();
+        CameraController cam = CameraController.getInstance(); // Usando getter estándar
 
+        // Lógica de Inercia y Rotación
         float yaw = player.getYRot();
-        // Usamos variables locales estáticas en lugar de intentar inyectarlas en la cámara de Vanilla
-        yawVelocity = (float)(player.input.leftImpulse * 0.5f); // Simplificado porque mouseDelta está oculto en 1.20
-        yawVelocity += -(yaw - prevYaw) * 3.0F;
-        yawVelocity = MathUtil.lerp(smoothYawVelocity, yawVelocity, 0.1F);
+        cam.yawVelocity = (float)(player.input.leftImpulse * cam.mouseDelta.x);
+        cam.yawVelocity += -(yaw - cam.prevYaw) * 3.0F;
+        cam.smoothYawVelocity = MathUtil.lerp(cam.smoothYawVelocity, cam.yawVelocity, 0.1F);
 
         float pitch = -player.getXRot();
-        pitchVelocity = (float)(player.input.forwardImpulse * 0.5f + player.getDeltaMovement().y * 0.5f);
-        pitchVelocity += -(pitch - prevPitch) * 3.0F;
-        pitchVelocity = MathUtil.lerp(smoothPitchVelocity, pitchVelocity, 0.1F);
+        cam.pitchVelocity = (float)(player.input.forwardImpulse * cam.mouseDelta.z + (float)player.getDeltaMovement().y * cam.mouseDelta.y);
+        cam.pitchVelocity += -(pitch - cam.prevPitch) * 3.0F;
+        cam.smoothPitchVelocity = MathUtil.lerp(cam.smoothPitchVelocity, cam.pitchVelocity, 0.1F);
 
-        // TODO: Si tenías un método "cam.update(bound, partialTick);", tendrás que
-        // aplicar la lógica de movimiento directamente a player.setYRot() / setXRot() aquí.
+        // El corazón de la cámara: Actualiza la posición basándose en los huesos del NPC
+        cam.update(bound, partialTick);
 
-        prevYaw = yaw;
-        smoothYawVelocity = yawVelocity;
-        prevPitch = pitch;
-        smoothPitchVelocity = pitchVelocity;
+        // Guardar estados para el siguiente frame
+        cam.prevYaw = yaw;
+        cam.prevPitch = pitch;
 
-        RenderSystem.enableDepthTest();
-        RenderSystem.enableBlend();
-        RenderSystem.enableCull();
+        // Limpiar estado de renderizado para evitar glitches en otros mods
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     // =========================================================================
-    //  2. Re-render NPC in throw state
+    //  2. Renderizado Forzado (Estado Throw)
     // =========================================================================
 
     @SubscribeEvent
-    public static void onRenderWorldThrow(RenderLevelStageEvent event) {
+    public void onRenderWorldThrow(RenderLevelStageEvent event) {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) return;
 
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null) return;
 
-        UUID playerUUID = player.getUUID();
+        for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
+            if (npc.isRemoved() || !(npc instanceof NpcStateAccessor state)) continue;
 
-        try {
-            for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
-                if (!npc.level().isClientSide() || npc.isRemoved()) continue;
-                if (!(npc instanceof NpcStateAccessor state)) continue;
+            if (npc.getAnimState() == AnimState.START_THROWING) {
+                boolean isOwner = player.getUUID().equals(state.getSexPartnerUUID());
 
-                if (npc.getAnimState() != AnimState.START_THROWING) continue;
+                // Forzamos el renderizado con un ángulo de rotación específico (-420.69)
+                // que el renderizador de la chica usa como señal interna.
+                npc.setInvisible(true); // Ocultamos la versión "normal" para que no se duplique
 
-                boolean isOwner = playerUUID.equals(state.getSexPartnerUUID());
-
-                // Temporarily enable invisible so vanilla skips it
-                npc.setInvisible(true);
                 mc.getEntityRenderDispatcher().render(
                         npc,
-                        0.0, 0.0, 0.0,
+                        0.0D, 0.0D, 0.0D,
                         isOwner ? -420.69F : 0.0F,
-                        event.getPartialTick(), // Reemplaza mc.getFrameTime()
+                        event.getPartialTick(),
                         event.getPoseStack(),
                         mc.renderBuffers().bufferSource(),
-                        0xF000F0 // Luz máxima
+                        0xF000F0 // Full Bright
                 );
+
                 npc.setInvisible(false);
-
-                RenderSystem.enableDepthTest();
-                RenderSystem.enableBlend();
-                RenderSystem.enableCull();
-                return;
+                break;
             }
-        } catch (ConcurrentModificationException ignored) {}
+        }
     }
 
     // =========================================================================
-    //  3. Cancel hand render
+    //  3. Cancelar Renderizado (Cuerpo y Manos)
     // =========================================================================
 
     @SubscribeEvent
-    public static void onRenderHand(RenderHandEvent event) {
+    public void onRenderHand(RenderHandEvent event) {
+        if (shouldHidePlayerContent()) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public void onRenderPlayer(RenderPlayerEvent.Pre event) {
+        if (shouldHidePlayerContent(event.getEntity().getUUID())) {
+            event.setCanceled(true);
+        }
+    }
+
+    /** Helper para saber si debemos ocultar al jugador basado en el estado del NPC */
+    private boolean shouldHidePlayerContent() {
         Minecraft mc = Minecraft.getInstance();
-        LocalPlayer player = mc.player;
-        if (player == null) return;
-
-        UUID playerUUID = player.getUUID();
-
-        try {
-            for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
-                if (!(npc instanceof NpcStateAccessor state)) continue;
-
-                AnimState anim = npc.getAnimState();
-                if (anim != AnimState.PICK_UP && anim != AnimState.START_THROWING) continue;
-
-                if (playerUUID.equals(state.getSexPartnerUUID())) {
-                    event.setCanceled(true);
-                    return;
-                }
-            }
-        } catch (ConcurrentModificationException ignored) {}
+        return mc.player != null && shouldHidePlayerContent(mc.player.getUUID());
     }
 
-    // =========================================================================
-    //  4. Cancel player body render
-    // =========================================================================
-
-    @SubscribeEvent
-    public static void onRenderPlayer(RenderPlayerEvent.Pre event) {
-        UUID playerUUID = event.getEntity().getUUID();
-
-        try {
-            for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
-                if (!(npc instanceof NpcStateAccessor state)) continue;
-
+    private boolean shouldHidePlayerContent(UUID playerUUID) {
+        for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
+            if (npc instanceof NpcStateAccessor state) {
                 AnimState anim = npc.getAnimState();
-                if (anim != AnimState.PICK_UP && anim != AnimState.START_THROWING) continue;
-
-                if (playerUUID.equals(state.getSexPartnerUUID())) {
-                    event.setCanceled(true);
-                    return;
+                if ((anim == AnimState.PICK_UP || anim == AnimState.START_THROWING)
+                        && playerUUID.equals(state.getSexPartnerUUID())) {
+                    return true;
                 }
             }
-        } catch (ConcurrentModificationException ignored) {}
+        }
+        return false;
     }
 }

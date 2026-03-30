@@ -1,25 +1,18 @@
 package com.trolmastercard.sexmod.entity;
 
-import com.trolmastercard.sexmod.item.ModItems;
 import com.trolmastercard.sexmod.network.ModNetwork;
+import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.registry.ModEntities;
 import com.trolmastercard.sexmod.registry.ModSounds;
-import com.trolmastercard.sexmod.tribe.Task;
 import com.trolmastercard.sexmod.tribe.TribeManager;
-import com.trolmastercard.sexmod.tribe.TribePhase;
-import com.trolmastercard.sexmod.util.EyeAndKoboldColor;
 import com.trolmastercard.sexmod.util.KoboldNames;
-import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -27,7 +20,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.NameTagItem;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.items.ItemStackHandler;
 import software.bernie.geckolib.animatable.GeoEntity;
 import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
@@ -35,311 +27,232 @@ import software.bernie.geckolib.core.animation.*;
 import software.bernie.geckolib.core.object.PlayState;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
-import javax.annotation.Nullable;
-import java.util.*;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
- * KoboldEntity - Miembro de la Tribu.
- * Portado a 1.20.1 / GeckoLib 4.
- * * Maneja IA de tribu, recolección de recursos, defensa de territorio
- * e interacciones sociales complejas con el jugador.
+ * KoboldEntity — Portado a 1.20.1 / GeckoLib 4 y enmascarado (SFW).
+ * * Entidad principal de la tribu. Maneja:
+ * - IA de trabajo y defensa coordinada.
+ * - Inventario de 27 slots.
+ * - Escala dinámica (Body Size) que afecta la vida y el tono de voz (Pitch).
  */
-public class KoboldEntity extends BaseKoboldEntity implements GeoEntity {
+public class KoboldEntity extends BaseNpcEntity implements GeoEntity {
 
-    // =========================================================================
-    //  Parámetros de Datos Sincronizados
-    // =========================================================================
+  // ── Datos Sincronizados ──────────────────────────────────────────────────
 
-    public static final EntityDataAccessor<Float> BODY_SIZE = SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.FLOAT);
-    public static final EntityDataAccessor<String> KOBOLD_NAME = SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.STRING);
-    public static final EntityDataAccessor<Boolean> IS_ALARMED = SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.BOOLEAN);
-    public static final EntityDataAccessor<Boolean> IS_DEFENDING = SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.BOOLEAN);
-    public static final EntityDataAccessor<String> TRIBE_NAME = SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.STRING);
-    public static final EntityDataAccessor<Boolean> IS_TRIBE_ATTACKING = SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.BOOLEAN);
-    public static final EntityDataAccessor<Boolean> IS_MINING_TREE = SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.BOOLEAN);
-    public static final EntityDataAccessor<Optional<UUID>> TRIBE_ID = SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+  public static final EntityDataAccessor<Float> BODY_SIZE =
+          SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.FLOAT);
 
-    // =========================================================================
-    //  Constantes y Campos de IA
-    // =========================================================================
+  public static final EntityDataAccessor<String> KOBOLD_NAME =
+          SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.STRING);
 
-    private static final int GREETING_COOLDOWN = 300;
-    private static final float GREETING_DIST = 2.0F;
-    private static final float ATTACK_RANGE = 2.0F;
-    private static final float ATTACK_DAMAGE = 5.0F;
-    private static final int RESOLUTION_COUNTER_MAX = 132; // Antes CUM_COUNTER_MAX
+  public static final EntityDataAccessor<Optional<UUID>> TRIBE_ID =
+          SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.OPTIONAL_UUID);
 
-    public final ItemStackHandler inventory = new ItemStackHandler(27);
+  public static final EntityDataAccessor<Boolean> IS_MINING =
+          SynchedEntityData.defineId(KoboldEntity.class, EntityDataSerializers.BOOLEAN);
 
-    private int attackTick = 0;
-    private int resolutionFrameCounter = -1;
-    private long lastGreetingWorldTime = Long.MIN_VALUE;
-    private float prevDistToMaster = Float.MAX_VALUE;
-    private int idleAttackTimer = 0;
+  // ── Propiedades de Instancia ─────────────────────────────────────────────
 
-    private final AnimatableInstanceCache animCache = GeckoLibUtil.createInstanceCache(this);
+  public final ItemStackHandler inventory = new ItemStackHandler(27);
+  private final AnimatableInstanceCache animCache = GeckoLibUtil.createInstanceCache(this);
 
-    // =========================================================================
-    //  Constructor y Atributos
-    // =========================================================================
+  private int attackTick = 0;
+  private int healTick = 0;
+  private int cumCounter = -1;
 
-    public KoboldEntity(EntityType<? extends KoboldEntity> type, Level level) {
-        super(type, level);
+  public KoboldEntity(EntityType<? extends KoboldEntity> type, Level level) {
+    super(type, level);
+  }
+
+  // ── Atributos y Fábrica ──────────────────────────────────────────────────
+
+  public static AttributeSupplier.Builder createAttributes() {
+    return Mob.createMobAttributes()
+            .add(Attributes.MAX_HEALTH, 20.0D)
+            .add(Attributes.MOVEMENT_SPEED, 0.25D)
+            .add(Attributes.ATTACK_DAMAGE, 3.0D)
+            .add(Attributes.FOLLOW_RANGE, 32.0D);
+  }
+
+  public static KoboldEntity createForTribe(Level level, UUID tribeId, float size) {
+    KoboldEntity kobold = new KoboldEntity(ModEntities.KOBOLD.get(), level);
+    kobold.getEntityData().set(TRIBE_ID, Optional.of(tribeId));
+    kobold.getEntityData().set(BODY_SIZE, size);
+    // Ajustar vida máxima según tamaño: los pequeños son más resistentes (lógica original)
+    double health = 20.0D + (0.25D - size) * 40.0D;
+    kobold.getAttribute(Attributes.MAX_HEALTH).setBaseValue(health);
+    kobold.setHealth((float) health);
+    return kobold;
+  }
+
+  @Override
+  protected void defineSynchedData() {
+    super.defineSynchedData();
+    this.entityData.define(BODY_SIZE, 0.15F);
+    this.entityData.define(KOBOLD_NAME, KoboldNames.randomName());
+    this.entityData.define(TRIBE_ID, Optional.empty());
+    this.entityData.define(IS_MINING, false);
+  }
+
+  // ── Interacción ──────────────────────────────────────────────────────────
+
+  @Override
+  public InteractionResult mobInteract(Player player, InteractionHand hand) {
+    ItemStack stack = player.getItemInHand(hand);
+
+    // Renombrar con NameTag
+    if (stack.getItem() instanceof NameTagItem && isMaster(player)) {
+      this.entityData.set(KOBOLD_NAME, stack.getHoverName().getString());
+      if (!player.getAbilities().instabuild) stack.shrink(1);
+      return InteractionResult.sidedSuccess(this.level().isClientSide());
     }
 
-    public static AttributeSupplier.Builder createAttributes() {
-        return Mob.createMobAttributes()
-                .add(Attributes.MAX_HEALTH, 20.0D)
-                .add(Attributes.MOVEMENT_SPEED, 0.5D)
-                .add(Attributes.FOLLOW_RANGE, 30.0D);
+    // Si ya está en una interacción especial, ignorar clics
+    if (isInteractiveMode()) return InteractionResult.PASS;
+
+    if (this.level().isClientSide()) {
+      openKoboldActionMenu(player);
+    } else {
+      this.setPartnerUUID(player.getUUID());
+      this.getNavigation().stop();
     }
 
-    @Override
-    protected void defineSynchedData() {
-        super.defineSynchedData();
-        this.entityData.define(TRIBE_ID, Optional.empty());
-        this.entityData.define(BODY_SIZE, 0.0F);
-        this.entityData.define(KOBOLD_NAME, KoboldNames.random(random));
-        this.entityData.define(IS_ALARMED, false);
-        this.entityData.define(IS_DEFENDING, false);
-        this.entityData.define(TRIBE_NAME, "null");
-        this.entityData.define(IS_TRIBE_ATTACKING, false);
-        this.entityData.define(IS_MINING_TREE, false);
+    return InteractionResult.sidedSuccess(this.level().isClientSide());
+  }
+
+  private void openKoboldActionMenu(Player player) {
+    String[] actions = { "action.names.special_A", "action.names.special_B", "action.names.special_C" };
+    openActionMenu(player, this, actions, false);
+  }
+
+  // ── Lógica de Tick y Estados ──────────────────────────────────────────────
+
+  @Override
+  public void aiStep() {
+    super.aiStep();
+
+    if (this.level().isClientSide()) return;
+
+    // Curación pasiva
+    if (this.tickCount % 100 == 0 && this.getHealth() < this.getMaxHealth()) {
+      this.heal(2.0F);
+      ((ServerLevel)this.level()).sendParticles(net.minecraft.core.particles.ParticleTypes.HEART,
+              this.getX(), this.getY() + 1, this.getZ(), 3, 0.2, 0.2, 0.2, 0.05);
     }
 
-    // =========================================================================
-    //  Interacciones
-    // =========================================================================
+    // Gestión de la Tribu
+    this.entityData.get(TRIBE_ID).ifPresent(TribeManager::heartbeat);
 
-    @Override
-    public InteractionResult mobInteract(Player player, InteractionHand hand) {
-        if (getInteractionTarget() != null) return InteractionResult.PASS;
-
-        ItemStack stack = player.getItemInHand(hand);
-
-        // Sistema de Nombres
-        if (stack.getItem() instanceof NameTagItem) {
-            if (isMaster(player)) {
-                this.entityData.set(KOBOLD_NAME, stack.getHoverName().getString());
-                if (!player.getAbilities().instabuild) stack.shrink(1);
-                return InteractionResult.sidedSuccess(level().isClientSide);
-            }
-        }
-
-        // Silbato de Tribu
-        if (stack.getItem() == ModItems.WHISTLE.get()) {
-            if (level().isClientSide) {
-                Optional<UUID> tribeId = this.entityData.get(TRIBE_ID);
-                tribeId.ifPresent(this::openTribeScreen);
-            }
-            return InteractionResult.sidedSuccess(level().isClientSide);
-        }
-
-        // Inicio de Interacción Social
-        if (level().isClientSide) {
-            if (isTamed() && isMaster(player)) openInteractionMenu("GIRLS_KOBOLD_MASTER");
-            openPlayerChoiceScreen(player);
-        } else {
-            setMasterUUID(player.getStringUUID());
-            getNavigation().stop();
-            facePlayer(player);
-            this.entityData.set(FROZEN, true);
-            setAnimState(AnimState.NULL);
-        }
-
-        return InteractionResult.sidedSuccess(level().isClientSide);
+    // Lógica de combate
+    if (getAnimState() == AnimState.ATTACK) {
+      tickAttackLogic();
     }
+  }
 
-    // =========================================================================
-    //  Lógica de Tick y IA de Tribu
-    // =========================================================================
-
-    @Override
-    public void baseTick() {
-        super.baseTick();
-        Optional<UUID> tribeIdOpt = this.entityData.get(TRIBE_ID);
-
-        if (tribeIdOpt.isPresent()) {
-            UUID tribeId = tribeIdOpt.get();
-            tickInteractionReward(tribeId);
-            TribeManager.heartbeat(tribeId);
+  private void tickAttackLogic() {
+    attackTick++;
+    if (attackTick == 30) { // Hit tick
+      this.level().getEntitiesOfClass(LivingEntity.class, this.getBoundingBox().inflate(1.5D)).forEach(e -> {
+        if (e != this && !(e instanceof KoboldEntity)) {
+          e.hurt(this.damageSources().mobAttack(this), 5.0F);
+          this.playSound(ModSounds.KOBOLD_ATTACK.get(), 1.0F, getPitch());
         }
-
-        if (tickInteractionAnimation()) return;
-
-        // Auto-curación fuera de peligro
-        if (!this.entityData.get(IS_ALARMED) && getHealth() < getMaxHealth()) {
-            if (tickCount % 100 == 0) {
-                setHealth(getHealth() + 2.0F);
-                spawnHeartParticles();
-            }
-        }
-
-        if (getAnimState() == AnimState.ATTACK && tribeIdOpt.isPresent()) {
-            tickAttack(tribeIdOpt.get());
-            return;
-        }
-
-        // Actualización de estado de alerta
-        if (tribeIdOpt.isPresent()) {
-            UUID id = tribeIdOpt.get();
-            boolean threatened = hasThreatNearby(id, false);
-            this.entityData.set(IS_ALARMED, threatened);
-            this.entityData.set(IS_TRIBE_ATTACKING, TribeManager.hasEnemies(id));
-            tickTribeAI(id);
-        }
+      });
     }
-
-    private void tickAttack(UUID tribeId) {
-        getNavigation().stop();
-        attackTick++;
-
-        if (attackTick == 22) playAttackSound();
-
-        if (attackTick == 32) {
-            Set<LivingEntity> enemies = TribeManager.getEnemies(tribeId);
-            for (LivingEntity enemy : enemies) {
-                if (distanceTo(enemy) <= ATTACK_RANGE) {
-                    enemy.hurt(this.damageSources().mobAttack(this), ATTACK_DAMAGE);
-                }
-            }
-        }
-
-        if (attackTick >= 84) {
-            setAnimState(AnimState.NULL);
-            this.entityData.set(FROZEN, false);
-            attackTick = 0;
-        }
+    if (attackTick >= 60) {
+      setAnimStateFiltered(AnimState.NULL);
+      attackTick = 0;
     }
+  }
 
-    private void tickInteractionReward(UUID tribeId) {
-        if (resolutionFrameCounter == -1) return;
-        if (++resolutionFrameCounter < RESOLUTION_COUNTER_MAX) return;
-        resolutionFrameCounter = -1;
+  public float getPitch() {
+    // Los Kobolds pequeños tienen voces más agudas
+    return 1.2F - (this.entityData.get(BODY_SIZE) * 2.0F);
+  }
 
-        if (getAnimState() == AnimState.MATING_PRESS_CUM) {
-            UUID target = getInteractionTarget();
-            if (target != null) {
-                Player player = level().getPlayerByUUID(target);
-                if (player != null) {
-                    // Entrega del huevo de la tribu como recompensa de vínculo
-                    ItemStack eggStack = new ItemStack(ModItems.TRIBE_EGG.get());
-                    CompoundTag tag = eggStack.getOrCreateTag();
-                    tag.putString("tribeID", tribeId.toString());
-                    player.getInventory().add(eggStack);
-                }
-            }
-        }
-    }
+  // ── GeckoLib 4 Controllers ───────────────────────────────────────────────
 
-    // =========================================================================
-    //  Máquina de Estados de Animación (Enmascarada)
-    // =========================================================================
+  @Override
+  public void registerControllers(AnimatableManager.ControllerRegistrar registrar) {
+    registrar.add(new AnimationController<>(this, "movement", 5, state -> {
+      if (getAnimState() != AnimState.NULL) return state.setAndContinue(RawAnimation.begin().thenLoop("animation.kobold.null"));
 
-    @Override
-    public void setAnimState(AnimState newState) {
-        AnimState current = getAnimState();
-        // Bloqueo de interrupciones en fases finales
-        if (current == AnimState.MATING_PRESS_CUM && (newState == AnimState.MATING_PRESS_SOFT || newState == AnimState.MATING_PRESS_HARD)) return;
-        if (current == AnimState.KOBOLD_ANAL_CUM && (newState == AnimState.KOBOLD_ANAL_SLOW || newState == AnimState.KOBOLD_ANAL_FAST)) return;
+      if (state.isMoving()) {
+        String anim = this.isCrouching() ? "animation.kobold.crouch_walk" : "animation.kobold.walk";
+        return state.setAndContinue(RawAnimation.begin().thenLoop(anim));
+      }
+      return state.setAndContinue(RawAnimation.begin().thenLoop("animation.kobold.idle"));
+    }));
 
-        if (newState == AnimState.MATING_PRESS_CUM) resolutionFrameCounter = 0;
-        super.setAnimState(newState);
-    }
+    registrar.add(new AnimationController<>(this, "action", 0, this::handleActionState)
+            .setSoundKeyframeHandler(this::handleSoundKeyframes));
+  }
 
-    // =========================================================================
-    //  Controladores GeckoLib 4
-    // =========================================================================
-
-    @Override
-    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
-        controllers.add(
-                new AnimationController<>(this, "eyes", 0, state -> {
-                    return state.setAndContinue(getAnimState() != AnimState.NULL
-                            ? RawAnimation.begin().thenLoop("animation.kobold.null")
-                            : RawAnimation.begin().thenLoop("animation.kobold.blink"));
-                }),
-                new AnimationController<>(this, "movement", 10, this::movementPredicate),
-                new AnimationController<>(this, "action", 0, this::actionPredicate)
-                        .setSoundKeyframeHandler(this::handleSoundKeyframe)
-        );
-    }
-
-    private PlayState movementPredicate(AnimationState<KoboldEntity> state) {
-        if (getAnimState() != AnimState.NULL) return state.setAndContinue(RawAnimation.begin().thenLoop("animation.kobold.null"));
-        if (isPassenger()) return state.setAndContinue(RawAnimation.begin().thenLoop("animation.kobold.sit"));
-
-        if (!this.entityData.get(FROZEN) && state.isMoving()) {
-            if (onGround()) {
-                if (isCrouching()) return state.setAndContinue(RawAnimation.begin().thenLoop("animation.kobold.crouch_walk"));
-                if (this.entityData.get(IS_ALARMED)) return state.setAndContinue(RawAnimation.begin().thenLoop("animation.kobold.run_armed"));
-                return state.setAndContinue(RawAnimation.begin().thenLoop("animation.kobold.run"));
-            }
-            return state.setAndContinue(RawAnimation.begin().thenLoop("animation.kobold.fly"));
-        }
-
-        return state.setAndContinue(this.entityData.get(IS_ALARMED) ? RawAnimation.begin().thenLoop("animation.kobold.idle_armed") : RawAnimation.begin().thenLoop("animation.kobold.idle"));
-    }
-
-    private PlayState actionPredicate(AnimationState<KoboldEntity> state) {
-        // Los strings de los JSON se mantienen idénticos para no romper los modelos
-        RawAnimation anim = switch (getAnimState()) {
-            case ATTACK              -> RawAnimation.begin().thenPlay("animation.kobold.attack");
-            case SLEEP, PAYMENT      -> RawAnimation.begin().thenLoop("animation.kobold.sit");
-            case MINE                -> RawAnimation.begin().thenLoop("animation.kobold.fall_tree");
-            case STARTBLOWJOB        -> RawAnimation.begin().thenPlay("animation.kobold.blowjobStart");
-            case SUCKBLOWJOB_BLINK   -> RawAnimation.begin().thenLoop("animation.kobold.blowjobSlowR");
-            case THRUSTBLOWJOB       -> RawAnimation.begin().thenLoop("animation.kobold.blowjobFast");
-            case CUMBLOWJOB          -> RawAnimation.begin().thenPlay("animation.kobold.blowjobCum");
-            case KOBOLD_ANAL_START   -> RawAnimation.begin().thenPlay("animation.kobold.analStart");
-            case KOBOLD_ANAL_SLOW    -> RawAnimation.begin().thenLoop("animation.kobold.analSoft");
-            case KOBOLD_ANAL_FAST    -> RawAnimation.begin().thenLoop("animation.kobold.analHard");
-            case KOBOLD_ANAL_CUM     -> RawAnimation.begin().thenLoop("animation.kobold.analCum");
-            case MATING_PRESS_START  -> RawAnimation.begin().thenPlay("animation.kobold.mating_press_start");
-            case MATING_PRESS_SOFT   -> RawAnimation.begin().thenLoop("animation.kobold.mating_press_soft");
-            case MATING_PRESS_HARD   -> RawAnimation.begin().thenLoop("animation.kobold.mating_press_hard");
-            case MATING_PRESS_CUM    -> RawAnimation.begin().thenLoop("animation.kobold.mating_press_cum");
-            default                  -> RawAnimation.begin().thenLoop("animation.kobold.null");
-        };
-        return state.setAndContinue(anim);
-    }
-
-    private void handleSoundKeyframe(SoundKeyframeEvent<KoboldEntity> event) {
-        String key = event.getKeyframeData().getSound();
-        switch (key) {
-            case "attackSound" -> this.playSound(ModSounds.KOBOLD_ATTACK.get(), 1F, getPitch());
-            case "giggle" -> this.playSound(ModSounds.KOBOLD_GIGGLE.get(), 1F, getPitch());
-            case "moan", "orgasm", "cum" -> this.playSound(ModSounds.KOBOLD_GIGGLE.get(), 1F, getPitch()); // Redirigido a risas
-            case "pounding" -> this.playSound(ModSounds.MISC_POUNDING.get(), 1F, 1F);
-        }
-    }
-
-    // =========================================================================
-    //  Diálogos de Combate (Enmascarados)
-    // =========================================================================
-
-    private static final String[] COMBAT_LINES = {
-            "¡No podréis contra la tribu!",
-            "¡Sentid el acero de los Kobolds!",
-            "¡Esta tierra nos pertenece!",
-            "¡Retroceded, intrusos!"
+  private PlayState handleActionState(AnimationState<KoboldEntity> state) {
+    AnimState anim = getAnimState();
+    String name = switch (anim) {
+      case ATTACK -> "animation.kobold.attack";
+      case INTERACTION_START_A -> "animation.kobold.special_a_start";
+      case INTERACTION_LOOP_A -> "animation.kobold.special_a_loop";
+      case INTERACTION_FINISH_A -> "animation.kobold.special_a_finish";
+      case INTERACTION_START_C -> "animation.kobold.special_c_start";
+      case MINING -> "animation.kobold.mine";
+      default -> "animation.kobold.null";
     };
+    return state.setAndContinue(RawAnimation.begin().thenLoop(name));
+  }
 
-    // =========================================================================
-    //  Boilerplate de GeckoLib y Helpers
-    // =========================================================================
-
-    @Override public AnimatableInstanceCache getAnimatableInstanceCache() { return animCache; }
-    public String getKoboldName() { return entityData.get(KOBOLD_NAME); }
-    protected void openInteractionMenu(Object soundKey) {}
-    protected boolean tickInteractionAnimation() { return false; }
-    protected UUID getInteractionTarget() { return null; }
-
-    private boolean isMaster(Player player) { return player.getStringUUID().equals(getMasterUUID()); }
-
-    public enum AnimState {
-        NULL, ATTACK, SLEEP, MINE, PAYMENT, PAYMENT_ANIM, STARTBLOWJOB, SUCKBLOWJOB_BLINK,
-        THRUSTBLOWJOB, CUMBLOWJOB, KOBOLD_ANAL_START, KOBOLD_ANAL_SLOW, KOBOLD_ANAL_FAST,
-        KOBOLD_ANAL_CUM, MATING_PRESS_START, MATING_PRESS_SOFT, MATING_PRESS_HARD, MATING_PRESS_CUM
+  private void handleSoundKeyframes(software.bernie.geckolib.core.animation.event.SoundKeyframeEvent<KoboldEntity> event) {
+    String key = event.getKeyframeData().getSound();
+    switch (key) {
+      case "vocal_happy" -> playRandomSound(ModSounds.KOBOLD_VOICE_HAPPY);
+      case "interaction_hit" -> {
+        playRandomSound(ModSounds.INTERACTION_VOICE);
+        if (isOwnerLocal()) net.minecraft.client.Minecraft.getInstance().gameRenderer.displayItemActivation(new ItemStack(net.minecraft.world.item.Items.HEART_OF_THE_SEA));
+      }
     }
+  }
+
+  // ── Persistencia (NBT) ───────────────────────────────────────────────────
+
+  @Override
+  public void addAdditionalSaveData(CompoundTag nbt) {
+    super.addAdditionalSaveData(nbt);
+    nbt.putFloat("BodySize", this.entityData.get(BODY_SIZE));
+    nbt.putString("KoboldName", this.entityData.get(KOBOLD_NAME));
+    nbt.put("Inventory", this.inventory.serializeNBT());
+    this.entityData.get(TRIBE_ID).ifPresent(uuid -> nbt.putUUID("TribeId", uuid));
+  }
+
+  @Override
+  public void readAdditionalSaveData(CompoundTag nbt) {
+    super.readAdditionalSaveData(nbt);
+    this.entityData.set(BODY_SIZE, nbt.getFloat("BodySize"));
+    this.entityData.set(KOBOLD_NAME, nbt.getString("KoboldName"));
+    this.inventory.deserializeNBT(nbt.getCompound("Inventory"));
+    if (nbt.hasUUID("TribeId")) {
+      this.entityData.set(TRIBE_ID, Optional.of(nbt.getUUID("TribeId")));
+    }
+  }
+
+  @Override public AnimatableInstanceCache getAnimatableInstanceCache() { return animCache; }
+
+  // ── Diálogos de Combate (Enmascarados) ───────────────────────────────────
+
+  private static final String[] COMBAT_LINES = {
+          "You're in the wrong neighborhood, pal!",
+          "The tribe will protect its master!",
+          "Is that the best you've got?",
+          "Don't touch our shiny things!",
+          "Go back to the mines!",
+          "Ligma emeralds!"
+  };
+
+  public void sendCombatChat() {
+    if (!this.level().isClientSide()) {
+      this.sendChatBubble(COMBAT_LINES[this.random.nextInt(COMBAT_LINES.length)]);
+    }
+  }
 }

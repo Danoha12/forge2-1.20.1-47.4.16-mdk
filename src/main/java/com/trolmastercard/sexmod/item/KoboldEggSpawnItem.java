@@ -1,9 +1,10 @@
 package com.trolmastercard.sexmod.item;
-import com.trolmastercard.sexmod.ModEntityRegistry;
 
+import com.trolmastercard.sexmod.client.renderer.item.KoboldEggItemRenderer;
 import com.trolmastercard.sexmod.entity.KoboldEgg;
 import com.trolmastercard.sexmod.entity.EyeAndKoboldColor;
-import com.trolmastercard.sexmod.registry.ModEntityRegistry;
+import com.trolmastercard.sexmod.registry.ModEntities;
+import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -12,98 +13,102 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.client.extensions.common.IClientItemExtensions;
 import software.bernie.geckolib.animatable.GeoItem;
 import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
 import software.bernie.geckolib.core.animation.AnimatableManager;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
- * KoboldEggSpawnItem - ported from c7.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Item: {@code sexmod:kobold_egg_item}
- *
- * Right-click on a block - spawns a {@link KoboldEgg} entity at the hit position.
- * The egg's body color is determined by the item's damage/meta value via
- * {@link EyeAndKoboldColor#getColorByWoolId(int)}.
- * If the item has a {@code tribeID} NBT tag, the egg is assigned to that tribe.
- *
- * NOTE: This item differs from {@code TribeEggItem} (b9.class) which spawns a
- *       whole tribe structure.  This item spawns a single hatching-egg mob.
- *
- * Field mapping:
- *   b = animCache   (AnimationFactory - AnimatableInstanceCache)
- *   a = static singleton instance
- *
- * In 1.12.2:
- *   IAnimatable / AnimationFactory   - GeoItem / AnimatableInstanceCache
- *   func_77625_d(1)                  - Item.Properties().stacksTo(1)
- *   setRegistryName / func_77655_b   - handled by DeferredRegister
- *   MinecraftForge.EVENT_BUS.register - @Mod.EventBusSubscriber pattern
- *   ModelBakery / TileEntityItemStackRenderer - BlockEntityWithoutLevelRenderer (GeckoLib)
- *   PlayerInteractEvent.RightClickBlock - useOn(UseOnContext)
- *   world.func_72995_K               - level.isClientSide
- *   itemStack.func_77973_b() != a    - item != this (checked via instanceof / registry)
- *   new i(world) - new KoboldEgg(type, level)  (i.class = KoboldEgg entity)
- *   i.func_70107_b(x,y,z) - setPos(x,y,z)
- *   i.func_184212_Q().func_187227_b(i.b, color) - getEntityData().set(KoboldEgg.BODY_COLOR, color)
- *   nbt.func_74779_i("tribeID") - nbt.getString("tribeID")
- *   itemStack.func_190918_g(1) - stack.shrink(1)
- *   KoboldEgg.f = tribeID field - setTribeId(UUID)
+ * KoboldEggSpawnItem — Portado a 1.20.1 / GeckoLib 4.
+ * * Al usar este ítem en un bloque, spawnea una entidad KoboldEgg.
+ * * El color y la tribu se heredan de los datos del ItemStack (Damage y NBT).
  */
 public class KoboldEggSpawnItem extends Item implements GeoItem {
 
     private final AnimatableInstanceCache animCache = GeckoLibUtil.createInstanceCache(this);
 
     public KoboldEggSpawnItem() {
-        super(new Properties().stacksTo(1));
+        super(new Item.Properties().stacksTo(1));
     }
 
-    // =========================================================================
-    //  GeoItem  (originally IAnimatable with empty registerControllers)
-    // =========================================================================
+    // ── Lógica de Spawning ────────────────────────────────────────────────────
+
+    @Override
+    public InteractionResult useOn(UseOnContext ctx) {
+        Level level = ctx.getLevel();
+
+        // El spawning solo debe ocurrir en el servidor
+        if (level.isClientSide) {
+            return InteractionResult.SUCCESS;
+        }
+
+        ItemStack stack = ctx.getItemInHand();
+        Vec3 hitPos = ctx.getClickLocation();
+        Player player = ctx.getPlayer();
+
+        // Crear la entidad del huevo
+        KoboldEgg egg = new KoboldEgg(ModEntities.KOBOLD_EGG.get(), level);
+
+        // Posicionar el huevo ligeramente arriba del punto de impacto para evitar que se atore
+        egg.moveTo(hitPos.x, hitPos.y, hitPos.z, 0.0F, 0.0F);
+
+        // 1. Asignar Color: Convertimos el 'damage' del ítem al nombre del color
+        int colorId = stack.getDamageValue();
+        String colorName = EyeAndKoboldColor.getColorByWoolId(colorId).toString();
+        egg.getEntityData().set(KoboldEgg.BODY_COLOR, colorName);
+
+        // 2. Asignar Tribu: Leemos el UUID del NBT si existe
+        CompoundTag nbt = stack.getTag();
+        if (nbt != null && nbt.contains("tribeID")) {
+            try {
+                egg.setTribeId(UUID.fromString(nbt.getString("tribeID")));
+            } catch (IllegalArgumentException e) {
+                // Si el UUID está corrupto, generamos uno nuevo
+                egg.setTribeId(UUID.randomUUID());
+            }
+        }
+
+        // Aparecer la entidad en el mundo
+        if (level.addFreshEntity(egg)) {
+            // Consumir el ítem si no se está en creativo
+            if (player != null && !player.getAbilities().instabuild) {
+                stack.shrink(1);
+            }
+            return InteractionResult.CONSUME;
+        }
+
+        return InteractionResult.FAIL;
+    }
+
+    // ── GeckoLib 4: Configuración del Renderer ───────────────────────────────
+
+    @Override
+    public void initializeClient(Consumer<IClientItemExtensions> consumer) {
+        consumer.accept(new IClientItemExtensions() {
+            private KoboldEggItemRenderer renderer;
+
+            @Override
+            public BlockEntityWithoutLevelRenderer getCustomRenderer() {
+                if (this.renderer == null) {
+                    this.renderer = new KoboldEggItemRenderer();
+                }
+                return this.renderer;
+            }
+        });
+    }
 
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar registrar) {
-        // No animations on the item itself
+        // Los ítems usualmente son estáticos, pero aquí podrías añadir
+        // una animación de "latido" si quisieras.
     }
 
     @Override
     public AnimatableInstanceCache getAnimatableInstanceCache() {
         return animCache;
-    }
-
-    // =========================================================================
-    //  useOn  (original: PlayerInteractEvent.RightClickBlock handler)
-    // =========================================================================
-
-    @Override
-    public InteractionResult useOn(UseOnContext ctx) {
-        Level level = ctx.getLevel();
-        if (level.isClientSide) return InteractionResult.SUCCESS;
-
-        ItemStack stack  = ctx.getItemInHand();
-        Vec3 hitPos      = ctx.getClickLocation();
-
-        // Spawn the KoboldEgg entity
-        KoboldEgg egg = new KoboldEgg(ModEntityRegistry.KOBOLD_EGG.get(), level);
-        egg.setPos(hitPos.x, hitPos.y, hitPos.z);
-
-        // Set body color from item damage/meta via wool color mapping
-        String colorName = EyeAndKoboldColor.getColorByWoolId(
-            stack.getDamageValue()).toString();
-        egg.getEntityData().set(KoboldEgg.BODY_COLOR, colorName);
-
-        // Assign tribe ID from NBT if present
-        CompoundTag nbt = stack.getTag();
-        if (nbt != null && nbt.contains("tribeID")) {
-            egg.setTribeId(UUID.fromString(nbt.getString("tribeID")));
-        }
-
-        level.addFreshEntity(egg);
-        stack.shrink(1);
-
-        return InteractionResult.CONSUME;
     }
 }

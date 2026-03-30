@@ -1,170 +1,111 @@
-package com.trolmastercard.sexmod.inventory;
-import com.trolmastercard.sexmod.NpcInventoryEntity;
+package com.trolmastercard.sexmod.inventory; // Ajusta al paquete correcto
 
 import com.trolmastercard.sexmod.entity.NpcInventoryEntity;
-import com.trolmastercard.sexmod.inventory.slot.ClothingSlotType;
-import com.trolmastercard.sexmod.inventory.slot.NpcClothingSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.items.IItemHandler;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * NpcInventoryContainer - ported from ca.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * A {@link AbstractContainerMenu} holding 7 clothing slots for an NPC entity
- * (one per {@link ClothingSlotType}) plus the player's 36 inventory slots.
- *
- * Slot layout:
- *   b[0] WEAPON       (41, 60)
- *   b[1] BOW          (59, 60)
- *   b[2] HELMET       (81, 60)
- *   b[3] CHEST_PLATE (100, 60)
- *   b[4] PANTS       (119, 60)
- *   b[5] SHOES       (138, 60)
- *   b[6] ROD          (22, 60)
- *   Slots 7-33  : Player main inventory (3-9, Y=84-120)
- *   Slots 34-42 : Player hotbar (1-9, Y=142)
- *
- * Field mapping:
- *   d = npcEntity (eb - NpcInventoryEntity)
- *   b = clothing slot array (Slot[7])
- *   a = npcUUID (UUID)
- *   c = static open-container list (List<ca> - List<NpcInventoryContainer>)
- *
- * In 1.12.2:
- *   CapabilityItemHandler.ITEM_HANDLER_CAPABILITY (EnumFacing.NORTH)
- *     - entity.getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.NORTH)
- *   fe.b enum (ClothingSlot) - ClothingSlotType
- *   fe(ClothingSlotType, IItemHandler, id, x, y) - NpcClothingSlot(type, handler, id, x, y)
- *   func_75146_a(slot) - addSlot(slot)
- *   func_82846_b(player, index) - quickMoveStack(player, index)
- *   func_75135_a(stack, from, to, reverse) - moveItemStackTo(stack, from, to, reverse)
- *   field_75151_b.size() - slots.size()
- *   player.field_71071_by.field_70462_a.size() - player.getInventory().items.size()
+ * NpcInventoryContainer — Portado a 1.20.1.
+ * * Contenedor con 7 ranuras de ropa/armas (incluyendo la Caña de Pescar)
+ * * más el inventario del jugador.
  */
 public class NpcInventoryContainer extends AbstractContainerMenu {
 
-    /** All currently open NPC inventory containers. */
-    public static List<NpcInventoryContainer> openContainers = new ArrayList<>();
+    // 🚨 Lista segura para multihilos
+    public static final List<NpcInventoryContainer> openContainers = new CopyOnWriteArrayList<>();
 
-    NpcInventoryEntity npcEntity;
+    public final NpcInventoryEntity npcEntity;
+    public final UUID npcUUID;
 
-    /** The 7 clothing slots (indexed by ClothingSlotType). */
-    public Slot[] clothingSlots;
+    public NpcInventoryContainer(MenuType<?> type, int windowId, NpcInventoryEntity npc, Inventory playerInventory, UUID npcUUID) {
+        super(type, windowId);
+        this.npcUUID = npcUUID;
+        this.npcEntity = npc;
 
-    /** UUID of the NPC whose inventory this represents. */
-    public UUID npcUUID;
-
-    /**
-     * @param npc             The NPC entity whose clothing inventory to open.
-     * @param playerInventory The opening player's inventory.
-     * @param npcUUID         The NPC's UUID (used by client packets for targeting).
-     */
-    public NpcInventoryContainer(NpcInventoryEntity npc,
-                                 Inventory playerInventory,
-                                 UUID npcUUID) {
-        super(null /* register MenuType via DeferredRegister */, 0);
-        this.npcUUID    = npcUUID;
         openContainers.add(this);
 
         IItemHandler handler = npc.getItemHandler();
         if (handler == null) return;
 
-        this.npcEntity = npc;
+        // ── 7 Slots de Equipamiento del NPC ──
+        this.addSlot(new NpcEquipmentSlot(ClothingSlotType.WEAPON, handler, ClothingSlotType.WEAPON.id, 41, 60));
+        this.addSlot(new NpcEquipmentSlot(ClothingSlotType.BOW, handler, ClothingSlotType.BOW.id, 59, 60));
+        this.addSlot(new NpcEquipmentSlot(ClothingSlotType.HELMET, handler, ClothingSlotType.HELMET.id, 81, 60));
+        this.addSlot(new NpcEquipmentSlot(ClothingSlotType.CHEST_PLATE, handler, ClothingSlotType.CHEST_PLATE.id, 100, 60));
+        this.addSlot(new NpcEquipmentSlot(ClothingSlotType.PANTS, handler, ClothingSlotType.PANTS.id, 119, 60));
+        this.addSlot(new NpcEquipmentSlot(ClothingSlotType.SHOES, handler, ClothingSlotType.SHOES.id, 138, 60));
+        this.addSlot(new NpcEquipmentSlot(ClothingSlotType.ROD, handler, ClothingSlotType.ROD.id, 22, 60));
 
-        // ---- 7 Clothing slots -----------------------------------------------
-        this.clothingSlots = new Slot[] {
-            new NpcClothingSlot(ClothingSlotType.WEAPON,      handler, ClothingSlotType.WEAPON.id,      41,  60),
-            new NpcClothingSlot(ClothingSlotType.BOW,         handler, ClothingSlotType.BOW.id,         59,  60),
-            new NpcClothingSlot(ClothingSlotType.HELMET,      handler, ClothingSlotType.HELMET.id,      81,  60),
-            new NpcClothingSlot(ClothingSlotType.CHEST_PLATE, handler, ClothingSlotType.CHEST_PLATE.id, 100, 60),
-            new NpcClothingSlot(ClothingSlotType.PANTS,       handler, ClothingSlotType.PANTS.id,       119, 60),
-            new NpcClothingSlot(ClothingSlotType.SHOES,       handler, ClothingSlotType.SHOES.id,       138, 60),
-            new NpcClothingSlot(ClothingSlotType.ROD,         handler, ClothingSlotType.ROD.id,         22,  60)
-        };
-
-        // ---- Player main inventory (3-9) ------------------------------------
-        List<Slot> playerSlots = new ArrayList<>();
+        // ── Inventario principal del Jugador (3x9) ──
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 9; col++) {
-                playerSlots.add(new Slot(playerInventory,
-                    col + row * 9 + 9,
-                    8 + col * 18,
-                    84 + row * 18));
+                this.addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 84 + row * 18));
             }
         }
 
-        // ---- Player hotbar --------------------------------------------------
+        // ── Hotbar del Jugador ──
         for (int col = 0; col < 9; col++) {
-            playerSlots.add(new Slot(playerInventory, col, 8 + col * 18, 142));
+            this.addSlot(new Slot(playerInventory, col, 8 + col * 18, 142));
         }
-
-        // Register slots
-        for (Slot s : clothingSlots) addSlot(s);
-        for (Slot s : playerSlots)   addSlot(s);
     }
 
-    // =========================================================================
-    //  quickMoveStack  (shift-click)
-    //  Original: ca.func_82846_b(EntityPlayer, int)
-    // =========================================================================
+    // ── Lógica de Quick Move (Shift-Click) ───────────────────────────────────
 
     @Override
     public ItemStack quickMoveStack(Player player, int slotIndex) {
         ItemStack result = ItemStack.EMPTY;
         Slot slot = this.slots.get(slotIndex);
-        if (slot == null || !slot.hasItem()) return result;
 
-        ItemStack slotStack = slot.getItem();
-        result = slotStack.copy();
+        if (slot != null && slot.hasItem()) {
+            ItemStack slotStack = slot.getItem();
+            result = slotStack.copy();
 
-        // Clothing slots are at the start; player slots follow
-        int npcSlotCount = this.slots.size() - player.getInventory().items.size();
+            // 7 slots del NPC al principio
+            int npcSlotCount = 7;
 
-        if (slotIndex < npcSlotCount) {
-            // NPC slot - player inventory
-            if (!this.moveItemStackTo(slotStack, npcSlotCount, this.slots.size(), true)) {
-                return ItemStack.EMPTY;
+            if (slotIndex < npcSlotCount) {
+                // Mover del NPC al jugador
+                if (!this.moveItemStackTo(slotStack, npcSlotCount, this.slots.size(), true)) {
+                    return ItemStack.EMPTY;
+                }
+            } else {
+                // Mover del jugador al NPC
+                if (!this.moveItemStackTo(slotStack, 0, npcSlotCount, false)) {
+                    return ItemStack.EMPTY;
+                }
             }
-        } else {
-            // Player inventory - NPC slots
-            if (!this.moveItemStackTo(slotStack, 0, npcSlotCount, false)) {
-                return ItemStack.EMPTY;
+
+            if (slotStack.isEmpty()) {
+                slot.set(ItemStack.EMPTY);
+            } else {
+                slot.setChanged();
             }
-        }
 
-        if (slotStack.getCount() == 0) {
-            slot.set(ItemStack.EMPTY);
-        } else {
-            slot.setChanged();
+            slot.onTake(player, slotStack);
         }
-
-        slot.onTake(player, slotStack);
         return result;
     }
 
-    // =========================================================================
-    //  Misc overrides
-    // =========================================================================
+    // ── Seguridad y Limpieza ─────────────────────────────────────────────────
 
     @Override
-    public boolean stillValid(Player player) { return true; }
+    public boolean stillValid(Player player) {
+        return this.npcEntity != null && this.npcEntity.isAlive() && player.distanceToSqr(this.npcEntity) < 64.0D;
+    }
 
     @Override
     public void removed(Player player) {
         super.removed(player);
-    }
-
-    /** Sync a single slot (original: {@code ca.func_75141_a(int, ItemStack)}). */
-    @Override
-    public void setItem(int slotId, int stateId, ItemStack stack) {
-        super.setItem(slotId, stateId, stack);
+        // ¡CRÍTICO: Evita fugas de memoria en el servidor!
+        openContainers.remove(this);
     }
 }

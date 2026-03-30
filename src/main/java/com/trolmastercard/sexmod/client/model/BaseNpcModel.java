@@ -1,107 +1,97 @@
 package com.trolmastercard.sexmod.client.model;
-import com.trolmastercard.sexmod.registry.AnimState;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
-import com.trolmastercard.sexmod.entity.AnimState;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
+import com.trolmastercard.sexmod.registry.AnimState;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
 import software.bernie.geckolib.cache.object.GeoBone;
-import software.bernie.geckolib.core.animatable.model.CoreGeoBone;
 import software.bernie.geckolib.core.animation.AnimationState;
 import software.bernie.geckolib.model.GeoModel;
 
 import java.util.HashSet;
-import java.util.Optional;
 
 /**
- * BaseNpcModel - ported from cv.class (Fapcraft 1.12.2 v1.1) to 1.20.1 / GeckoLib 4.
- *
- * Abstract parent GeoModel for all NPC entities.
- * Each subclass provides:
- *   - {@link #getGeoFiles()}  - array of geo ResourceLocations (indexed by MODEL_INDEX)
- *   - {@link #getTextureResource(BaseNpcEntity)} - default texture path
- *   - {@link #getAnimationResource(BaseNpcEntity)} - animation json path
- *   - Bone-name arrays for each clothing slot (helmet, chest, upper flesh, etc.)
- *
- * The protected {@code c} array (geo files) is populated by {@link #getGeoFiles()}.
- *
- * ============================================================
- * Slot bone arrays (override in subclasses):
- * ============================================================
- *   c() - getHelmetBones()
- *   f() - getChestBones()
- *   a() - getUpperFleshBones()
- *   h() - getLowerArmorBones()
- *   e() - getLowerFleshBones()
- *   b() - getShoeBones()
- *   g() - getFeatureBones()   (optional: feelers, leaves, big-blob, etc.)
- *
- * ============================================================
- * GeckoLib 3 - 4:
- * ============================================================
- *   AnimatedGeoModel<T>           - GeoModel<T>
- *   AnimationEvent<T>             - AnimationState<T>
- *   IBone                         - CoreGeoBone
- *   clearModelRendererList()      - clearBones() via CachedAnimationProcessor
+ * BaseNpcModel — Portado a 1.20.1 / GeckoLib 4.
+ * * Modelo abstracto padre para todas las entidades NPC.
+ * * Maneja variaciones de geometría, huesos de ropa y utilidades de renderizado.
  */
 public abstract class BaseNpcModel<T extends BaseNpcEntity> extends GeoModel<T> {
 
-    /** Geo file array, populated once from {@link #getGeoFiles()}. */
-    protected final ResourceLocation[] c;
+    /** Caché de archivos Geo. Poblado de forma perezosa para evitar fugas de memoria. */
+    protected ResourceLocation[] geoFilesCache;
 
     protected BaseNpcModel() {
-        this.c = getGeoFiles();
+        // No llamamos a métodos abstractos aquí. Se inicializará la primera vez que se pida.
     }
 
     // =========================================================================
-    //  Abstract / overridable geometry selectors
+    //  Selectores de Geometría
     // =========================================================================
 
-    /** Returns the array of geo resource locations this model can use. */
+    /** Retorna el arreglo de ubicaciones de recursos geo que este modelo puede usar. */
     protected abstract ResourceLocation[] getGeoFiles();
 
-    /** Default model selection: uses MODEL_INDEX to index into {@link #c}. */
     @Override
     public ResourceLocation getModelResource(T entity) {
-        if (c == null || c.length == 0) return null;
+        // Lazy loading seguro: solo cargamos el array la primera vez
+        if (geoFilesCache == null) {
+            geoFilesCache = getGeoFiles();
+        }
+
+        if (geoFilesCache == null || geoFilesCache.length == 0) return null;
+
+        // En 1.20.1, acceder a los EntityData es rápido, pero asegúrate de que MODEL_INDEX esté registrado
         int idx = entity.getEntityData().get(BaseNpcEntity.MODEL_INDEX);
-        if (idx < 0 || idx >= c.length) return c[0];
-        return c[idx];
+
+        if (idx < 0 || idx >= geoFilesCache.length) return geoFilesCache[0];
+
+        return geoFilesCache[idx];
     }
 
+    // Nota: Como heredas de GeoModel, las subclases ESTÁN OBLIGADAS a implementar:
+    // public abstract ResourceLocation getTextureResource(T entity);
+    // public abstract ResourceLocation getAnimationResource(T entity);
+
     // =========================================================================
-    //  setCustomAnimations  (original: cv.a(em, Integer, AnimationEvent))
+    //  Animaciones Procedurales (GeckoLib 4)
     // =========================================================================
 
     @Override
     public void setCustomAnimations(T entity, long instanceId, AnimationState<T> animState) {
-        // Base: no-op. Subclasses call super() first, then do their own logic.
+        super.setCustomAnimations(entity, instanceId, animState);
+        // Base: no-op. Las subclases como JennyModel o EllieModel inyectarán rotaciones
+        // de cabeza, parpadeos de ojos o físicas de pechos aquí.
     }
 
     // =========================================================================
-    //  Slot bone arrays (override in subclasses)
+    //  Arreglos de Huesos por Ranura (Ropa / Cuerpo)
     // =========================================================================
 
-    /** Helmet bone names.        Original: {@code cv.c()} */
     public String[] getHelmetBones()      { return new String[0]; }
-    /** Chest-armor bone names.   Original: {@code cv.f()} */
     public String[] getChestBones()       { return new String[0]; }
-    /** Upper flesh bone names.   Original: {@code cv.a()} */
     public String[] getUpperFleshBones()  { return new String[0]; }
-    /** Lower armor bone names.   Original: {@code cv.h()} */
     public String[] getLowerArmorBones()  { return new String[0]; }
-    /** Lower flesh bone names.   Original: {@code cv.e()} */
     public String[] getLowerFleshBones()  { return new String[0]; }
-    /** Shoe bone names.          Original: {@code cv.b()} */
     public String[] getShoeBones()        { return new String[0]; }
-    /** Optional extra feature bones (feelers, bigblob, etc.). Original: {@code cv.g()} */
     public String[] getFeatureBones()     { return new String[0]; }
 
     // =========================================================================
-    //  Utility helpers
+    //  Integración con Equipamiento (¡Nuevo para ColoredNpcHandRenderer!)
     // =========================================================================
 
-    /** Returns true if entity's current AnimState is one of {@code states}. */
+    /**
+     * Determina qué objeto de armadura corresponde a un hueso específico.
+     * Sobrescribir en subclases si el NPC soporta armadura visible.
+     */
+    public ItemStack getArmorItemForBone(T entity, String boneName) {
+        return ItemStack.EMPTY; // Por defecto, sin armadura.
+    }
+
+    // =========================================================================
+    //  Helpers de Utilidad
+    // =========================================================================
+
+    /** Verifica rápido si la entidad está en uno de los estados especificados. */
     public static boolean isInState(BaseNpcEntity entity, AnimState... states) {
         AnimState cur = entity.getAnimState();
         for (AnimState s : states) {
@@ -111,15 +101,17 @@ public abstract class BaseNpcModel<T extends BaseNpcEntity> extends GeoModel<T> 
     }
 
     public HashSet<String> getHiddenBoneNames() {
-        return NpcBoneRegistry.EMPTY_SET;
+        return new HashSet<>();
     }
 
-    protected Optional<GeoBone> getBone(String name) {
-        return getAnimationProcessor().getBone(name);
-    }
-
+    /**
+     * Oculta o muestra un hueso en GeckoLib 4.
+     */
     protected void setBoneHidden(String name, boolean hidden) {
-        CoreGeoBone bone = getBone(name);
-        if (bone != null) bone.setHidden(hidden);
+        // En GL4, getBone() devuelve GeoBone directamente (o null si no existe)
+        GeoBone bone = this.getAnimationProcessor().getBone(name);
+        if (bone != null) {
+            bone.setHidden(hidden);
+        }
     }
 }

@@ -1,7 +1,7 @@
-package com.trolmastercard.sexmod.network.packet;
+package com.trolmastercard.sexmod.network.packet; // Ajusta a tu paquete de red
 
-import com.trolmastercard.sexmod.item.ModItems;
-import com.trolmastercard.sexmod.tribe.EyeAndKoboldColor;
+import com.trolmastercard.sexmod.registry.ModItems;
+import com.trolmastercard.sexmod.util.EyeAndKoboldColor;
 import com.trolmastercard.sexmod.tribe.TribeManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -12,69 +12,53 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * SendEggPacket - ported from z.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Sent CLIENT - SERVER when the player should receive a tribe egg item.
- *
- * The server:
- *  1. Resolves the tribe UUID for the sending player
- *  2. Looks up the tribe's {@link EyeAndKoboldColor} to choose the wool meta
- *  3. Creates a {@link ModItems#TRIBE_EGG} ItemStack with the tribe UUID
- *     stored as an NBT string under the key {@code "tribeID"}
- *  4. Adds it to the player's inventory
+ * SendEggPacket — Portado a 1.20.1.
+ * * CLIENTE -> SERVIDOR.
+ * * Solicita la generación de un Huevo de Tribu para el jugador actual.
  */
 public class SendEggPacket {
 
-    private final boolean valid;
+    // Paquete vacío, no necesitamos variables
 
-    // =========================================================================
-    //  Constructor
-    // =========================================================================
+    public SendEggPacket() {}
 
-    public SendEggPacket() {
-        this.valid = true;
+    // ── Codec ────────────────────────────────────────────────────────────────
+
+    public static void encode(SendEggPacket msg, FriendlyByteBuf buf) {
+        // Nada que escribir
     }
 
-    // =========================================================================
-    //  Codec
-    // =========================================================================
-
     public static SendEggPacket decode(FriendlyByteBuf buf) {
-        buf.readBoolean(); // consumed  packet is valid if it arrived at all
         return new SendEggPacket();
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeBoolean(valid);
-    }
+    // ── Manejador ────────────────────────────────────────────────────────────
 
-    // =========================================================================
-    //  Handler
-    // =========================================================================
-
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
+    public static void handle(SendEggPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
         ctx.enqueueWork(() -> {
             ServerPlayer player = ctx.getSender();
-            if (player == null) {
-                System.out.println("received an invalid Message @SendEgg :(");
-                return;
-            }
+            if (player == null) return;
 
+            // 1. Obtener la tribu del jugador
             UUID tribeId = TribeManager.getTribeIdForMaster(player.getUUID());
             if (tribeId == null) return;
 
+            // 2. Obtener el color de la tribu
             EyeAndKoboldColor color = TribeManager.getTribeColor(tribeId);
+            if (color == null) return; // Seguridad extra
 
-            // Build the egg ItemStack - wool color determined by tribe color
+            // 3. Construir el ItemStack del Huevo
             ItemStack egg = new ItemStack(ModItems.TRIBE_EGG.get(), 1);
-            net.minecraft.nbt.CompoundTag tag = egg.getOrCreateTag();
-            tag.putString("tribeID", tribeId.toString());
-            // Store wool color index so the item renderer can tint it
-            tag.putInt("woolMeta", color.getWoolMeta());
-            egg.setTag(tag);
 
-            player.getInventory().add(egg);
+            // 🚨 1.20.1: Uso de putUUID en lugar de putString para mayor rendimiento
+            egg.getOrCreateTag().putUUID("tribeID", tribeId);
+            egg.getOrCreateTag().putInt("woolMeta", color.getWoolMeta());
+
+            // 4. Dárselo al jugador de forma segura (si está lleno, lo tira al piso)
+            if (!player.getInventory().add(egg)) {
+                player.drop(egg, false);
+            }
         });
         ctx.setPacketHandled(true);
     }

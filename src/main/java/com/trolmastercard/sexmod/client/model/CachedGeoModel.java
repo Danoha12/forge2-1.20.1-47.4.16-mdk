@@ -1,60 +1,57 @@
 package com.trolmastercard.sexmod.client.model;
 
-import com.trolmastercard.sexmod.BaseNpcEntity;
-import com.trolmastercard.sexmod.client.anim.CachedAnimationProcessor;
+import com.trolmastercard.sexmod.client.renderer.CachedAnimationProcessor;
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import net.minecraft.resources.ResourceLocation;
 import software.bernie.geckolib.cache.object.BakedGeoModel;
 import software.bernie.geckolib.core.animatable.GeoAnimatable;
-import software.bernie.geckolib.model.GeoModel;
 
 import java.lang.reflect.Field;
 
 /**
- * CachedGeoModel - Sistema de Optimización de Modelos.
- * Portado a 1.20.1 / GeckoLib 4.
- * * Esta clase abstracta reemplaza el procesador de animaciones por defecto por uno
- * con caché (CachedAnimationProcessor) para acelerar la búsqueda de huesos.
- * Utiliza reflexión para mantener la compatibilidad con el núcleo de GeckoLib.
+ * CachedGeoModel — Portado a 1.20.1 / GeckoLib 4 y enmascarado (SFW).
+ * * Clase abstracta que optimiza el rendimiento de búsqueda de huesos reemplazando
+ * el procesador de animaciones estándar por un {@link CachedAnimationProcessor}.
+ * * Utiliza reflexión para inyectar el procesador personalizado directamente
+ * en la jerarquía de GeckoLib.
  */
-public abstract class CachedGeoModel<T extends BaseNpcEntity & GeoAnimatable>
-        extends BaseNpcModel<T> {
+public abstract class CachedGeoModel<T extends BaseNpcEntity & GeoAnimatable> extends BaseNpcModel<T> {
 
     protected CachedGeoModel() {
         super();
-        // Intercambio del procesador por defecto por la versión optimizada con caché
+        // Inyectar el procesador con caché mediante reflexión
         try {
-            // Buscamos el campo en la clase base de GeckoLib (GeoModel)
-            Field field = findFieldInHierarchy(GeoModel.class, "animationProcessor");
+            // En GeckoLib 4, el campo en la clase GeoModel se llama "processor"
+            Field field = findFieldInHierarchy(this.getClass(), "processor");
             if (field != null) {
                 field.setAccessible(true);
-                // Inyectamos nuestro procesador personalizado
-                field.set(this, new CachedAnimationProcessor<T>());
+                // El constructor de CachedAnimationProcessor ahora requiere el modelo (this)
+                field.set(this, new CachedAnimationProcessor<>(this));
+            } else {
+                System.err.println("[Mod] No se pudo encontrar el campo 'processor' en la jerarquía de GeoModel.");
             }
         } catch (Exception e) {
-            // Si la reflexión falla, el mod usará el procesador estándar (más lento pero seguro)
             e.printStackTrace();
         }
     }
 
     // =========================================================================
-    //  getBakedModel - Limpia y re-registra los huesos en cada carga
+    //  getBakedModel — Limpieza y registro de huesos por cada carga
     // =========================================================================
 
     @Override
     public BakedGeoModel getBakedModel(ResourceLocation location) {
         BakedGeoModel model = super.getBakedModel(location);
         if (model == null) {
-            throw new RuntimeException("Error crítico: No se encontró el modelo en la ruta: " + location);
+            throw new RuntimeException("No se pudo cargar el modelo en: " + location);
         }
 
-        // Accedemos al procesador para refrescar la jerarquía de huesos
+        // Limpiamos el caché y registramos los huesos del nuevo modelo horneado
         var processor = getAnimationProcessor();
-
-        // Si el procesador es de nuestro tipo Cached, limpiamos la memoria vieja
         if (processor instanceof CachedAnimationProcessor) {
-            ((CachedAnimationProcessor<T>) processor).clearBones();
+            processor.clearBones();
             for (var bone : model.topLevelBones()) {
-                ((CachedAnimationProcessor<T>) processor).registerBone(bone);
+                processor.registerBone(bone);
             }
         }
 
@@ -62,12 +59,11 @@ public abstract class CachedGeoModel<T extends BaseNpcEntity & GeoAnimatable>
     }
 
     // =========================================================================
-    //  Ayudante de Reflexión (Búsqueda en profundidad)
+    //  Utilidad de Reflexión
     // =========================================================================
 
     /**
-     * Busca un campo específico subiendo por la jerarquía de clases.
-     * Esto es necesario porque GeckoLib 4 ha cambiado la estructura interna.
+     * Busca un campo en la clase actual y en todas sus superclases.
      */
     private Field findFieldInHierarchy(Class<?> startClass, String fieldName) {
         Class<?> current = startClass;

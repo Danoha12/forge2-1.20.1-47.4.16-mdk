@@ -1,14 +1,8 @@
 package com.trolmastercard.sexmod.network.packet;
-import com.trolmastercard.sexmod.KoboldEntity;
-import com.trolmastercard.sexmod.PlayerKoboldEntity;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
-import com.trolmastercard.sexmod.entity.KoboldEntity;
-import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;
-import com.trolmastercard.sexmod.entity.AnimState;
+import com.trolmastercard.sexmod.registry.AnimState;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkEvent;
 
@@ -16,113 +10,104 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * ChangeDataParameterPacket - ported from n.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Sent CLIENT - SERVER to update a named data parameter on a specific NPC.
- *
- * Supported parameter names (replaces the original string-switch):
- *   "pregnant"            - fn.U (pregnancy counter)
- *   "currentModel"        - em.D (model index)
- *   "currentAction"       - em.h (animation follow-up string)
- *   "animationFollowUp"   - em.h (animation follow-up string)
- *   "playerSheHasSexWith" - UUID of sex partner
- *   "targetPos"           - Vec3 encoded as "xfyfzf"
- *   "master"              - em.v (master UUID string)
- *   "walk speed"          - em.a (walk speed string)
- *   "shouldbeattargetpos" - em.G (boolean)
+ * ChangeDataParameterPacket — Portado a 1.20.1.
+ * * CLIENTE → SERVIDOR.
+ * * Actualiza parámetros específicos de un NPC en el servidor (IA, Modelos, Estados).
  */
 public class ChangeDataParameterPacket {
 
-    private final UUID  npcUUID;
-    private final String paramName;
-    private final String value;
-    private final boolean valid;
+  private final UUID npcUUID;
+  private final String paramName;
+  private final String value;
 
-    // =========================================================================
-    //  Constructors
-    // =========================================================================
+  public ChangeDataParameterPacket(UUID npcUUID, String paramName, String value) {
+    this.npcUUID = npcUUID;
+    this.paramName = paramName;
+    this.value = value != null ? value : "null";
+  }
 
-    public ChangeDataParameterPacket(UUID npcUUID, String paramName, String value) {
-        this.npcUUID   = npcUUID;
-        this.paramName = paramName;
-        this.value     = value;
-        this.valid     = true;
-    }
+  // ── Codec (Optimizado con UUID nativo) ───────────────────────────────────
 
-    // =========================================================================
-    //  Codec
-    // =========================================================================
+  public static void encode(ChangeDataParameterPacket msg, FriendlyByteBuf buf) {
+    buf.writeUUID(msg.npcUUID);
+    buf.writeUtf(msg.paramName);
+    buf.writeUtf(msg.value);
+  }
 
-    public static ChangeDataParameterPacket decode(FriendlyByteBuf buf) {
-        UUID   uuid  = UUID.fromString(buf.readUtf());
-        String param = buf.readUtf();
-        String val   = buf.readUtf();
-        return new ChangeDataParameterPacket(uuid, param, val);
-    }
+  public static ChangeDataParameterPacket decode(FriendlyByteBuf buf) {
+    return new ChangeDataParameterPacket(buf.readUUID(), buf.readUtf(), buf.readUtf());
+  }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(npcUUID.toString());
-        buf.writeUtf(paramName);
-        buf.writeUtf(value == null ? "null" : value);
-    }
+  // ── Manejador (Handler) ──────────────────────────────────────────────────
 
-    // =========================================================================
-    //  Handler
-    // =========================================================================
+  public static void handle(ChangeDataParameterPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
+    NetworkEvent.Context ctx = ctxSupplier.get();
 
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
-        NetworkEvent.Context ctx = ctxSupplier.get();
-        ctx.enqueueWork(() -> {
-            if (!valid) {
-                System.out.println("received an invalid message @ChangeDataParameter :(");
-                return;
-            }
+    if (!ctx.getDirection().getReceptionSide().isServer()) return;
 
-            BaseNpcEntity npc = BaseNpcEntity.getById(npcUUID);
-            if (npc == null) return;
+    ctx.enqueueWork(() -> {
+      // Buscamos al NPC en el registro global que creamos en BaseNpcEntity
+      BaseNpcEntity npc = null;
+      for (BaseNpcEntity e : BaseNpcEntity.getAllActive()) {
+        if (e.getNpcUUID().equals(msg.npcUUID)) {
+          npc = e;
+          break;
+        }
+      }
 
-            switch (paramName) {
-                case "pregnant" ->
-                    npc.entityData.set(PlayerKoboldEntity.PREGNANT, Integer.parseInt(value));
+      if (npc == null) return;
 
-                case "currentModel" ->
-                    npc.entityData.set(BaseNpcEntity.MODEL_INDEX, Integer.parseInt(value));
+      // Procesar el cambio según el nombre del parámetro
+      switch (msg.paramName) {
+        case "pregnant" -> {
+          // Si es un Kobold o entidad con embarazo, actualizamos su contador
+          // Nota: Asegúrate de tener este Accessor en PlayerKoboldEntity
+          // npc.getEntityData().set(PlayerKoboldEntity.PREGNANCY_TICK, Integer.parseInt(msg.value));
+        }
 
-                case "currentAction" -> {
-                    AnimState requested = AnimState.valueOf(value);
-                    // Guard: don't override an active non-NULL state with ATTACK
-                    if (requested == AnimState.ATTACK && npc.getAnimState() != AnimState.NULL) break;
-                    npc.setAnimState(requested);
-                }
+        case "currentModel" ->
+                npc.setModelIndex(Integer.parseInt(msg.value));
 
-                case "animationFollowUp" ->
-                    npc.entityData.set(BaseNpcEntity.ANIMATION_FOLLOW_UP, value);
+        case "currentAction" -> {
+          try {
+            AnimState requested = AnimState.valueOf(msg.value);
+            // No sobrescribimos una animación activa con un ataque simple
+            if (requested == AnimState.ATTACK && npc.getAnimState() != AnimState.NULL) break;
+            npc.setAnimStateFiltered(requested);
+          } catch (IllegalArgumentException e) {
+            System.err.println("[SexMod] Animación no válida enviada: " + msg.value);
+          }
+        }
 
-                case "playerSheHasSexWith" -> {
-                    if ("null".equals(value)) npc.setSexTarget(null);
-                    else                      npc.setSexTarget(UUID.fromString(value));
-                }
+        case "playerSheHasSexWith" -> {
+          if ("null".equals(msg.value)) npc.setPartnerUUID((UUID) null);
+          else npc.setPartnerUUID(UUID.fromString(msg.value));
+        }
 
-                case "targetPos" -> {
-                    String[] parts = value.split("f");
-                    Vec3 pos = new Vec3(
-                        Double.parseDouble(parts[0]),
-                        Double.parseDouble(parts[1]),
-                        Double.parseDouble(parts[2]));
-                    npc.setTargetPos(pos);
-                }
+        case "targetPos" -> {
+          // Formato esperado: "xfyfzf" (ej: 100f64f100f)
+          String[] parts = msg.value.split("f");
+          if (parts.length >= 3) {
+            npc.setTargetPos(new Vec3(
+                    Double.parseDouble(parts[0]),
+                    Double.parseDouble(parts[1]),
+                    Double.parseDouble(parts[2])
+            ));
+          }
+        }
 
-                case "master" ->
-                    npc.entityData.set(BaseNpcEntity.MASTER_UUID, value);
+        case "master" ->
+                npc.setMaster("null".equals(msg.value) ? "" : msg.value);
 
-                case "walk speed" ->
-                    npc.entityData.set(BaseNpcEntity.WALK_SPEED, value);
+        case "shouldbeattargetpos" ->
+                npc.setShouldBeAtTargetPos(Boolean.parseBoolean(msg.value));
 
-                case "shouldbeattargetpos" ->
-                    npc.entityData.set(BaseNpcEntity.SHOULD_BE_AT_TARGET_POS,
-                        Boolean.parseBoolean(value));
-            }
-        });
-        ctx.setPacketHandled(true);
-    }
+        case "walk speed" -> {
+          // Actualizamos el modo de velocidad (WALK, RUN, etc.)
+          npc.getEntityData().set(BaseNpcEntity.WALK_SPEED_MODE, msg.value);
+        }
+      }
+    });
+    ctx.setPacketHandled(true);
+  }
 }

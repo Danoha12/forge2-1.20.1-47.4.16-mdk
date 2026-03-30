@@ -1,44 +1,52 @@
-package com.trolmastercard.sexmod.util;
+package com.trolmastercard.sexmod.util; // Ajusta a tu paquete de utilidades
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.Node;
-
-import java.util.ArrayList;
+import net.minecraft.world.level.pathfinder.Path;
 
 /**
- * Utility helpers for pathfinding queries.
- * Obfuscated name: fl
+ * PathUtil — Portado a 1.20.1.
+ * * Utilidades matemáticas y de navegación para el Pathfinding de los NPCs.
+ * * Optimizada para no generar Garbage Collection (lag) durante la búsqueda.
  */
 public class PathUtil {
 
-    /** Returns the current destination block of a path, or BlockPos.ZERO if null. */
+    /** * Devuelve el bloque destino actual de un Path, o BlockPos.ZERO si es nulo.
+     */
     public static BlockPos getPathTarget(Path path) {
         if (path == null) return BlockPos.ZERO;
+
         Node endpoint = path.getEndNode();
         if (endpoint == null) return BlockPos.ZERO;
-        return new BlockPos(endpoint.x, endpoint.y, endpoint.z);
+
+        // Magia de 1.20.1: asBlockPos() hace el trabajo por ti
+        return endpoint.asBlockPos();
     }
 
-    /** Returns the current navigation destination of a mob, or BlockPos.ZERO. */
+    /** * Devuelve el destino de navegación actual de un Mob, o BlockPos.ZERO.
+     */
     public static BlockPos getPathTarget(Mob mob) {
-        Path path = mob.getNavigation().getPath();
-        return getPathTarget(path);
+        if (mob == null || mob.getNavigation() == null) return BlockPos.ZERO;
+        return getPathTarget(mob.getNavigation().getPath());
     }
 
     /**
-     * Returns true if any node in the given path matches one of the provided positions.
+     * Devuelve true si algún nodo en el Path dado coincide con alguna de las posiciones.
+     * 🚨 Ultra-optimizado: Sin ArrayLists temporales, lectura directa.
      */
     public static boolean pathContainsAny(Path path, BlockPos[] positions) {
+        if (path == null || positions == null || positions.length == 0) return false;
+
         int nodeCount = path.getNodeCount();
-        ArrayList<Node> nodes = new ArrayList<>();
+
+        // Leemos los nodos directamente sin crear listas en memoria
         for (int i = 0; i < nodeCount; i++) {
-            nodes.add(path.getNode(i));
-        }
-        for (Node node : nodes) {
+            BlockPos nodePos = path.getNode(i).asBlockPos();
+
             for (BlockPos pos : positions) {
-                if (node.x == pos.getX() && node.y == pos.getY() && node.z == pos.getZ()) {
+                // equals() en BlockPos es nativo, rápido y seguro
+                if (nodePos.equals(pos)) {
                     return true;
                 }
             }

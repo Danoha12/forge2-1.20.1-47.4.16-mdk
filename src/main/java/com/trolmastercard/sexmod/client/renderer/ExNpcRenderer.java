@@ -1,23 +1,18 @@
 package com.trolmastercard.sexmod.client.renderer;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import software.bernie.geckolib.model.GeoModel;
 
 /**
- * Ported from du.java (1.12.2 - 1.20.1)
- * Minimal BaseNpcRenderer wrapper for the "ex" entity type.
- *
- * Original: {@code class du extends d_<ex>}
- * NOTE: "ex" was tentatively mapped to NpcSubtype enum in the obfuscation table,
- *       but this class uses it as a GeoEntity type - it is likely a separate entity class.
- * TODO: replace {@code BaseNpcEntity} with the actual ex entity class once identified.
+ * ExNpcRenderer — Portado a 1.20.1.
+ * * Renderizador genérico para la entidad ofuscada "ex" (¿Jenny, Allie, Luna?).
+ * * TODO: Cambiar 'T' por la clase final (ej: JennyEntity) cuando descubras quién es.
  */
-public class ExNpcRenderer extends BaseNpcRenderer<BaseNpcEntity> {
+public class ExNpcRenderer<T extends BaseNpcEntity> extends BaseNpcRenderer<T> {
 
-    public ExNpcRenderer(EntityRendererProvider.Context context,
-                          GeoModel<BaseNpcEntity> model,
-                          double shadowRadius) {
+    public ExNpcRenderer(EntityRendererProvider.Context context, GeoModel<T> model, float shadowRadius) {
+        // Corrección vital: En 1.20.1 y GeckoLib 4, shadowRadius SIEMPRE es float.
         super(context, model, shadowRadius);
     }
 }

@@ -1,136 +1,102 @@
 package com.trolmastercard.sexmod.network.packet;
-import com.trolmastercard.sexmod.KoboldEntity;
-import com.trolmastercard.sexmod.NpcInventoryEntity;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
+import com.trolmastercard.sexmod.entity.KoboldEntity;
+import com.trolmastercard.sexmod.entity.NpcInventoryEntity;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.network.NetworkEvent;
-import net.minecraftforge.server.ServerLifecycleHooks;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * SyncInventoryPacket - ported from b1.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Sent CLIENT - SERVER. Uploads the full combined inventory state to the server:
- *  - 36 player inventory slots (hotbar + main)
- *  - Up to 7 NPC clothing slots (from {@code e2.Q} / {@code eb.Q})
- *  - Up to 27 kobold-entity chest slots (from {@code fo.L})
- *
- * Field mapping:
- *   a = masterUUID  (UUID of the NPC group)
- *   c = playerUUID  (UUID of the player whose inventory to sync)
- *   d = stacks      (ItemStack array, total size: 36 + up to 43 NPC slots)
- *
- * Slot layout (indices):
- *   [0..35]   - player inventory (36 slots: hotbar 0-8, main 9-35)
- *   [36..42]  - NPC clothing slots (7 for eb-type, 6 for e2-type)
- *   [36..62]  - KoboldEntity chest (27 for fo-type; overlaps with clothing indices)
- *
- * In 1.12.2:
- *   - {@code ByteBufUtils.readItemStack/writeItemStack} - {@code buf.readItem()/writeItem()}
- *   - {@code ByteBufUtils.readUTF8String/writeUTF8String} - {@code buf.readUtf()/writeUtf()}
- *   - {@code entityPlayer.field_71071_by} - {@code player.getInventory()}
- *   - {@code inventoryPlayer.func_70299_a(slot, stack)} - {@code inv.setItem(slot, stack)}
- *   - {@code IMessage/IMessageHandler} - FriendlyByteBuf + handle()
+ * SyncInventoryPacket — Portado a 1.20.1.
+ * * CLIENTE → SERVIDOR.
+ * * Sincroniza el inventario completo tras cerrar la GUI.
+ * * Soporta: Jugador (36 slots), Ropa NPC (7 slots) y Cofre Kobold (27 slots).
  */
 public class SyncInventoryPacket {
 
-    public static final int PLAYER_SLOTS   = 36;
-    public static final int CLOTHING_SLOTS = 7;
+    public static final int PLAYER_SLOTS = 36;
+    private final UUID masterUUID;
+    private final UUID playerUUID;
+    private final List<ItemStack> stacks;
 
-    private final UUID        masterUUID;
-    private final UUID        playerUUID;
-    private final ItemStack[] stacks;
-    private final boolean     valid;
-
-    // =========================================================================
-    //  Constructors
-    // =========================================================================
-
-    public SyncInventoryPacket(UUID masterUUID, UUID playerUUID, ItemStack[] stacks) {
+    public SyncInventoryPacket(UUID masterUUID, UUID playerUUID, List<ItemStack> stacks) {
         this.masterUUID = masterUUID;
         this.playerUUID = playerUUID;
-        this.stacks     = stacks;
-        this.valid      = true;
+        this.stacks = stacks;
     }
 
-    // =========================================================================
-    //  Codec
-    // =========================================================================
+    /** Constructor alternativo para arrays (usado por la Screen). */
+    public SyncInventoryPacket(UUID masterUUID, UUID playerUUID, ItemStack[] stacksArray) {
+        this(masterUUID, playerUUID, List.of(stacksArray));
+    }
+
+    // ── Codec (Optimizado para 1.20.1) ───────────────────────────────────────
+
+    public static void encode(SyncInventoryPacket msg, FriendlyByteBuf buf) {
+        buf.writeUUID(msg.masterUUID);
+        buf.writeUUID(msg.playerUUID);
+        // writeCollection maneja el tamaño y los items automáticamente
+        buf.writeCollection(msg.stacks, FriendlyByteBuf::writeItem);
+    }
 
     public static SyncInventoryPacket decode(FriendlyByteBuf buf) {
-        UUID master = UUID.fromString(buf.readUtf());
-        UUID player = UUID.fromString(buf.readUtf());
-        int count   = buf.readInt();
-        ItemStack[] items = new ItemStack[count];
-        for (int i = 0; i < count; i++) {
-            items[i] = buf.readItem();
-        }
-        var pkt = new SyncInventoryPacket(master, player, items);
-        return pkt;
+        return new SyncInventoryPacket(
+                buf.readUUID(),
+                buf.readUUID(),
+                buf.readCollection(ArrayList::new, FriendlyByteBuf::readItem)
+        );
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(masterUUID.toString());
-        buf.writeUtf(playerUUID.toString());
-        buf.writeInt(stacks.length);
-        for (ItemStack stack : stacks) {
-            buf.writeItem(stack);
-        }
-    }
+    // ── Manejador (Handler) ──────────────────────────────────────────────────
 
-    // =========================================================================
-    //  Handler
-    // =========================================================================
-
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
+    public static void handle(SyncInventoryPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
+
+        if (!ctx.getDirection().getReceptionSide().isServer()) return;
+
         ctx.enqueueWork(() -> {
-            if (!valid) {
-                System.out.println("received an invalid message @UploadInventoryToServer :(");
-                return;
+            ServerPlayer player = ctx.getSender();
+            if (player == null || !player.getUUID().equals(msg.playerUUID)) return;
+
+            // 1. Sincronizar Inventario del Jugador (Slots 0-35)
+            Inventory inv = player.getInventory();
+            for (int i = 0; i < PLAYER_SLOTS && i < msg.stacks.size(); i++) {
+                inv.setItem(i, msg.stacks.get(i).copy());
             }
 
-            ServerLifecycleHooks.getCurrentServer().execute(() -> {
-                ArrayList<BaseNpcEntity> npcs = BaseNpcEntity.getAllWithMaster(masterUUID);
+            // 2. Buscar NPCs vinculados al MasterUUID
+            List<BaseNpcEntity> targets = BaseNpcEntity.getAllWithMaster(msg.masterUUID);
 
-                for (BaseNpcEntity npc : npcs) {
-                    if (npc.level().isClientSide()) continue;
+            for (BaseNpcEntity npc : targets) {
+                if (npc.level().isClientSide()) continue;
 
-                    Player player = npc.level().getPlayerByUUID(playerUUID);
-                    if (player == null) return;
-
-                    // Sync player inventory (slots 0-35)
-                    Inventory inv = player.getInventory();
-                    for (int i = 0; i < PLAYER_SLOTS; i++) {
-                        inv.setItem(i, stacks[i]);
-                    }
-
-                    // Sync NPC clothing slots (slots 36-42)
-                    if (npc instanceof com.trolmastercard.sexmod.entity.NpcInventoryEntity invNpc) {
-                        var handler = invNpc.getClothingHandler();
-                        int slotCount = handler.getSlots();
-                        for (int i = 0; i < slotCount && (36 + i) < stacks.length; i++) {
-                            handler.setStackInSlot(i, stacks[36 + i]);
-                        }
-                    }
-
-                    // Sync KoboldEntity chest (slots 36-62)
-                    if (npc instanceof com.trolmastercard.sexmod.entity.KoboldEntity kob) {
-                        var chest = kob.getChestHandler();
-                        for (int i = 0; i < 27 && (36 + i) < stacks.length; i++) {
-                            chest.setStackInSlot(i, stacks[36 + i]);
-                        }
+                // Caso A: Ropa y Equipamiento (NpcInventoryEntity)
+                if (npc instanceof NpcInventoryEntity invNpc) {
+                    var handler = invNpc.getInventory();
+                    // Los slots de ropa empiezan en el índice 36 del paquete
+                    for (int i = 0; i < 7 && (36 + i) < msg.stacks.size(); i++) {
+                        handler.setStackInSlot(i, msg.stacks.get(36 + i).copy());
                     }
                 }
-            });
+
+                // Caso B: Cofre de Almacenamiento (KoboldEntity)
+                if (npc instanceof KoboldEntity kobold) {
+                    // Los Kobolds usan un inventario extendido (usualmente 27 slots)
+                    var chest = kobold.getInventory();
+                    // Si el paquete es grande, llenamos el cofre desde el índice 36
+                    for (int i = 0; i < chest.getSlots() && (36 + i) < msg.stacks.size(); i++) {
+                        chest.setStackInSlot(i, msg.stacks.get(36 + i).copy());
+                    }
+                }
+            }
         });
         ctx.setPacketHandled(true);
     }

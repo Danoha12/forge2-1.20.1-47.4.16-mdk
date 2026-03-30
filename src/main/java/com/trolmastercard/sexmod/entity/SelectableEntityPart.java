@@ -1,35 +1,37 @@
-package com.trolmastercard.sexmod.entity;
+package com.trolmastercard.sexmod.entity; // Ajusta a tu paquete de entidades
 
-import com.trolmastercard.sexmod.BaseNpcEntity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.Pose;
 import net.minecraftforge.entity.PartEntity;
 
 /**
- * SelectableEntityPart - Portado de bb.class (1.12.2) a 1.20.1.
- * * Parte de entidad multi-parte cuya detección de colisión y selección (pickability)
- * depende del flag 'active'.
+ * SelectableEntityPart — Portado a 1.20.1.
+ * * Sub-entidad (hitbox secundaria) vinculada a un NPC principal.
+ * * Controlada por la variable 'active' para permitir interacciones específicas.
  */
 public class SelectableEntityPart extends PartEntity<BaseNpcEntity> {
 
     public boolean active = false;
-    private final EntityDimensions dimensions;
 
-    /**
-     * @param parent El NPC dueño de esta parte.
-     * @param width  Ancho de la hitbox.
-     * @param height Alto de la hitbox.
-     */
+    // 🚨 1.20.1: Las dimensiones deben guardarse en este objeto inmutable
+    public final EntityDimensions partDimensions;
+
     public SelectableEntityPart(BaseNpcEntity parent, float width, float height) {
         super(parent);
-        this.dimensions = EntityDimensions.scalable(width, height);
+
+        // Creamos las dimensiones escalables y forzamos al motor a actualizar la AABB (Bounding Box)
+        this.partDimensions = EntityDimensions.scalable(width, height);
         this.refreshDimensions();
     }
 
+    // ── Sobrescritura de Dimensiones (Obligatorio en 1.20.1) ─────────────────
+
     @Override
-    public boolean isPickable() {
-        return this.active;
+    public EntityDimensions getDimensions(Pose pose) {
+        return this.partDimensions;
     }
+
+    // ── Lógica de Colisión e Interacción ─────────────────────────────────────
 
     @Override
     public boolean canBeCollidedWith() {
@@ -37,7 +39,12 @@ public class SelectableEntityPart extends PartEntity<BaseNpcEntity> {
     }
 
     @Override
-    public EntityDimensions getDimensions(Pose pose) {
-        return this.dimensions;
+    public boolean isPickable() {
+        // isPickable define si el jugador puede hacerle clic derecho/izquierdo
+        return this.active;
     }
+
+    // Nota para el futuro: Recuerda que BaseNpcEntity deberá llamar a
+    // part.setPos(...) en su propio método tick() para que esta hitbox
+    // siga al NPC principal cuando camine.
 }

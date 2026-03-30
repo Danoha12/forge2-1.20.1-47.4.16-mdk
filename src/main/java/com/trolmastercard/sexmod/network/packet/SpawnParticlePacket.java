@@ -1,82 +1,93 @@
-package com.trolmastercard.sexmod.network.packet;
-import com.trolmastercard.sexmod.BaseNpcEntity;
+package com.trolmastercard.sexmod.network.packet; // Ajusta a tu paquete de red
 
-import net.minecraft.core.particles.ParticleType;
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * SpawnParticlePacket - ported from en.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * SERVER - CLIENT. Tells the client to spawn N copies of the named particle at
- * every entity whose NPC UUID matches the given UUID.
- *
- * 1.12.2 - 1.20.1:
- *   - IMessage/IMessageHandler - FriendlyByteBuf + handle(Supplier)
- *   - ByteBufUtils - buf.readUtf / buf.writeUtf
- *   - EnumParticleTypes.func_186831_a(name) - ForgeRegistries.PARTICLE_TYPES.getValue(rl)
- *   - em.a(particle, em) - npc.spawnParticle(type)
- *   - em.ad() - BaseNpcEntity.getAllNpcs()
- *   - field_72995_K - level.isClientSide()
+ * SpawnParticlePacket — Portado a 1.20.1.
+ * * SERVIDOR -> CLIENTE.
+ * * Ordena al cliente generar N cantidad de partículas en un NPC específico.
  */
 public class SpawnParticlePacket {
 
-    private final UUID   npcUUID;
-    private final String particleId;
-    private final int    count;
+    public final UUID npcUUID;
+    public final ResourceLocation particleId;
+    public final int count;
+
+    // ── Constructores ────────────────────────────────────────────────────────
 
     public SpawnParticlePacket(UUID npcUUID, String particleId) {
-        this(npcUUID, particleId, 1);
+        this(npcUUID, new ResourceLocation(particleId), 1);
     }
 
-    public SpawnParticlePacket(UUID npcUUID, String particleId, int count) {
-        this.npcUUID    = npcUUID;
+    public SpawnParticlePacket(UUID npcUUID, ResourceLocation particleId, int count) {
+        this.npcUUID = npcUUID;
         this.particleId = particleId;
-        this.count      = count;
+        this.count = count;
     }
 
-    // -- Serialisation ----------------------------------------------------------
+    // ── Codec (Optimizado para 1.20.1) ───────────────────────────────────────
 
     public static void encode(SpawnParticlePacket msg, FriendlyByteBuf buf) {
-        buf.writeUtf(msg.npcUUID.toString());
-        buf.writeUtf(msg.particleId);
+        buf.writeUUID(msg.npcUUID); // 128 bits crudos, ¡no más Strings!
+        buf.writeResourceLocation(msg.particleId); // Nativo de Forge/Minecraft
         buf.writeInt(msg.count);
     }
 
     public static SpawnParticlePacket decode(FriendlyByteBuf buf) {
-        UUID   id    = UUID.fromString(buf.readUtf());
-        String pId   = buf.readUtf();
-        int    count = buf.readInt();
-        return new SpawnParticlePacket(id, pId, count);
+        return new SpawnParticlePacket(
+                buf.readUUID(),
+                buf.readResourceLocation(),
+                buf.readInt()
+        );
     }
 
-    // -- Handler ----------------------------------------------------------------
+    // ── Manejador ────────────────────────────────────────────────────────────
 
     public static void handle(SpawnParticlePacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
-        if (!ctx.getDirection().getReceptionSide().isClient()) {
-            System.out.println("received an invalid message @SpawnParticle :(");
-            ctx.setPacketHandled(true);
-            return;
-        }
-        ctx.enqueueWork(() -> {
-            var particleType = ForgeRegistries.PARTICLE_TYPES.getValue(
-                    new net.minecraft.resources.ResourceLocation(msg.particleId));
-            if (particleType == null) return;
 
-            for (BaseNpcEntity npc : new ArrayList<>(BaseNpcEntity.getAllNpcs())) {
-                if (!npc.level.isClientSide()) continue;
-                if (!npc.getNpcUUID().equals(msg.npcUUID)) continue;
-                for (int i = 0; i < msg.count; i++) {
-                    npc.spawnParticleAt(particleType);
-                }
-            }
-        });
+        if (ctx.getDirection().getReceptionSide().isClient()) {
+            ctx.enqueueWork(() -> {
+                // 🛡️ Aislamiento total para que el servidor dedicado jamás lea esto por error
+                DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> handleClient(msg));
+            });
+        } else {
+            System.out.println("[SexMod] Error: El servidor recibió un @SpawnParticle :(");
+        }
+
         ctx.setPacketHandled(true);
+    }
+
+    // ── Lógica del Cliente ───────────────────────────────────────────────────
+
+    private static void handleClient(SpawnParticlePacket msg) {
+        // Obtenemos el tipo de partícula de los registros de Forge
+        var particleType = ForgeRegistries.PARTICLE_TYPES.getValue(msg.particleId);
+        if (particleType == null) return;
+
+        // Copiamos la lista para evitar ConcurrentModificationException
+        List<BaseNpcEntity> allNpcs = new ArrayList<>(BaseNpcEntity.getAllNpcs());
+
+        for (BaseNpcEntity npc : allNpcs) {
+            // 🚨 1.20.1: level() es un método ahora
+            if (!npc.level().isClientSide()) continue;
+
+            if (!npc.getNpcUUID().equals(msg.npcUUID)) continue;
+
+            for (int i = 0; i < msg.count; i++) {
+                npc.spawnParticleAt(particleType);
+            }
+        }
     }
 }

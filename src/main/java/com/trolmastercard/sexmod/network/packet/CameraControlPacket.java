@@ -1,38 +1,29 @@
 package com.trolmastercard.sexmod.network.packet;
 
+import com.trolmastercard.sexmod.client.gui.InteractionMeterOverlay;
+import com.trolmastercard.sexmod.client.handler.ClientStateManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
 
 /**
- * CameraControlPacket - ported from gz.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Sent SERVER - CLIENT to lock or unlock the player's movement/camera
- * during a sex scene involving the player.
- *
- * When locked=true:
- *   - Stops player velocity
- *   - Shows HornyMeterOverlay (ds.c() - HornyMeterOverlay.show())
- *
- * 1.12.2 - 1.20.1 migrations:
- *   - IMessage/IMessageHandler - FriendlyByteBuf + handle(Supplier&lt;NetworkEvent.Context&gt;)
- *   - Minecraft.func_71410_x() - Minecraft.getInstance()
- *   - entity.func_70016_h(0,0,0) - entity.setDeltaMovement(0,0,0)
- *   - ClientStateManager.a(bool) - ClientStateManager.setPlayerLocked(bool)
- *   - ds.c() - HornyMeterOverlay.show()
+ * CameraControlPacket — Portado a 1.20.1.
+ * * SERVIDOR → CLIENTE.
+ * * Bloquea la cámara, el movimiento y muestra el "Interaction Meter" (GUI).
  */
 public class CameraControlPacket {
 
-    /** Whether the player should be locked (true) or unlocked (false). */
     private final boolean locked;
 
     public CameraControlPacket(boolean locked) {
         this.locked = locked;
     }
 
-    // -- Serialisation ----------------------------------------------------------
+    // ── Codec ────────────────────────────────────────────────────────────────
 
     public static void encode(CameraControlPacket msg, FriendlyByteBuf buf) {
         buf.writeBoolean(msg.locked);
@@ -42,36 +33,47 @@ public class CameraControlPacket {
         return new CameraControlPacket(buf.readBoolean());
     }
 
-    // -- Handler ----------------------------------------------------------------
+    // ── Manejador (Handler) ──────────────────────────────────────────────────
 
     public static void handle(CameraControlPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
+
+        // Verificamos que el paquete se recibió en el Cliente
         if (ctx.getDirection().getReceptionSide().isClient()) {
             ctx.enqueueWork(() -> {
-                ClientStateManager.setPlayerLocked(msg.locked);
-                try {
-                    Minecraft mc = Minecraft.getInstance();
-                    if (mc.player != null) {
-                        mc.player.setDeltaMovement(0.0D, 0.0D, 0.0D);
-                    }
-                } catch (Exception ignored) {}
-                try {
-                    if (msg.locked) {
-                        HornyMeterOverlay.show();
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                // Llamamos al método aislado para evitar crasheos en servidores
+                handleClientLogic(msg);
             });
-        } else {
-            System.out.println("received an invalid message @CameraControlPacket :(");
         }
         ctx.setPacketHandled(true);
     }
 
-    // -- Accessors --------------------------------------------------------------
+    /**
+     * Lógica exclusiva del Cliente.
+     * Usamos @OnlyIn por seguridad adicional del compilador.
+     */
+    // [El resto del código que mandaste está perfecto, solo un detalle en el handler]
 
-    public boolean isLocked() {
-        return locked;
+    @OnlyIn(Dist.CLIENT)
+    private static void handleClientLogic(CameraControlPacket msg) {
+        // 1. Guardamos el estado global
+        ClientStateManager.setPlayerLocked(msg.locked);
+
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            // 2. Frenazo en seco
+            mc.player.setDeltaMovement(0, 0, 0);
+
+            // 3. UI y Cámara
+            if (msg.locked) {
+                InteractionMeterOverlay.show();
+                // Opcional: Forzar tercera persona al empezar
+                // mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
+            } else {
+                InteractionMeterOverlay.hide();
+                // Opcional: Devolver a primera persona al terminar
+                // mc.options.setCameraType(CameraType.FIRST_PERSON);
+            }
+        }
     }
 }

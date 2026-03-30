@@ -1,33 +1,22 @@
-package com.trolmastercard.sexmod.client.model;
+package com.trolmastercard.sexmod.client.model; // Ajusta a tu paquete de modelos
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.trolmastercard.sexmod.client.model.IBoneAccessor; // Asegúrate del paquete
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
-import net.minecraft.client.model.geom.builders.*;
+import net.minecraft.client.model.geom.builders.CubeDeformation;
+import net.minecraft.client.model.geom.builders.CubeListBuilder;
+import net.minecraft.client.model.geom.builders.LayerDefinition;
+import net.minecraft.client.model.geom.builders.MeshDefinition;
+import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.world.entity.Entity;
 
 /**
- * SpearTipBoneModel - ported from cq.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Single-part model used as the spear-tip attachment on the Spear item.
- * Implements {@link IBoneAccessor} so the NPC hand-renderer can retrieve its
- * root {@link ModelPart}.
- *
- * Part:
- *   a (root)  - pivot at (-5, 2.5, 0), UV(0,0) box at (-2,-6,0, 2-6-2)
- *
- * Field mapping:
- *   a - rootPart
- *
- * In 1.12.2:
- *   ModelBase / ModelRenderer   - EntityModel<T> / ModelPart
- *   func_78793_a(x,y,z)        - PartPose.offset
- *   ModelBox(..., inflate=0)    - CubeListBuilder.addBox
- *   func_78785_a(scale)         - modelPart.render(...)
- *   implements at              - implements IBoneAccessor
- *   a() returns a              - getBoneRoot() returns rootPart
+ * SpearTipBoneModel — Portado a 1.20.1.
+ * * Modelo de una sola parte usado como anclaje/punta para el ítem de la lanza.
+ * * Implementa IBoneAccessor para recuperar su ModelPart raíz.
  */
 public class SpearTipBoneModel extends EntityModel<Entity> implements IBoneAccessor {
 
@@ -37,43 +26,54 @@ public class SpearTipBoneModel extends EntityModel<Entity> implements IBoneAcces
         this.rootPart = root.getChild("root");
     }
 
-    // =========================================================================
-    //  LayerDefinition
-    // =========================================================================
+    // ── Fábrica de Capas (LayerDefinition) ───────────────────────────────────
 
     public static LayerDefinition createBodyLayer() {
         MeshDefinition mesh = new MeshDefinition();
         PartDefinition root = mesh.getRoot();
 
-        // Pivot (-5, 2.5, 0), UV(0,0) box at (-2,-6,0) size 2-6-2
+        // Pivote (-5, 2.5, 0), UV(0,0), caja en (-2,-6,0) tamaño 2x6x2
         root.addOrReplaceChild("root",
-            CubeListBuilder.create()
-                .texOffs(0, 0)
-                .addBox(-2.0F, -6.0F, 0.0F, 2, 6, 2, new CubeDeformation(0.0F)),
-            PartPose.offset(-5.0F, 2.5F, 0.0F));
+                CubeListBuilder.create()
+                        .texOffs(0, 0)
+                        // 1.20.1: Uso de flotantes explícitos para evitar ambigüedades
+                        .addBox(-2.0F, -6.0F, 0.0F, 2.0F, 6.0F, 2.0F, new CubeDeformation(0.0F)),
+                PartPose.offset(-5.0F, 2.5F, 0.0F)
+        );
 
         return LayerDefinition.create(mesh, 64, 32);
     }
 
-    // =========================================================================
-    //  EntityModel
-    // =========================================================================
+    // ── EntityModel ──────────────────────────────────────────────────────────
 
     @Override
     public void setupAnim(Entity entity, float limbSwing, float limbSwingAmount,
-                          float ageInTicks, float netHeadYaw, float headPitch) {}
+                          float ageInTicks, float netHeadYaw, float headPitch) {
+        // Objeto estático, controlado por el renderizador de la mano
+    }
 
     @Override
     public void renderToBuffer(PoseStack poseStack, VertexConsumer consumer,
                                int packedLight, int packedOverlay,
                                float red, float green, float blue, float alpha) {
-        rootPart.render(poseStack, consumer, packedLight, packedOverlay, red, green, blue, alpha);
+        this.rootPart.render(poseStack, consumer, packedLight, packedOverlay, red, green, blue, alpha);
     }
 
-    // =========================================================================
-    //  IBoneAccessor
-    // =========================================================================
+    // ── IBoneAccessor ────────────────────────────────────────────────────────
 
+    // 🚨 CORREGIDO: Estandarizado a getRootBone() para coincidir con SpearModel
     @Override
-    public ModelPart getBoneRoot() { return rootPart; }
+    public ModelPart getRootBone() {
+        return this.rootPart;
+    }
+
+    // Opcional: Si IBoneAccessor exige setBoneRotation, deberías agregarlo aquí también
+    /*
+    @Override
+    public void setBoneRotation(ModelPart part, float xRot, float yRot, float zRot) {
+        part.xRot = xRot;
+        part.yRot = yRot;
+        part.zRot = zRot;
+    }
+    */
 }

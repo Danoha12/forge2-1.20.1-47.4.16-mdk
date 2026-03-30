@@ -1,12 +1,13 @@
 package com.trolmastercard.sexmod.network.packet;
-import com.trolmastercard.sexmod.KoboldEntity;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
+import com.trolmastercard.sexmod.entity.KoboldEntity;
+import com.trolmastercard.sexmod.tribe.TribeManager;
+import com.trolmastercard.sexmod.util.KoboldColorVariant;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.List;
@@ -14,75 +15,85 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * Client - Server packet sent when a player names and claims a Kobold tribe.
- * Obfuscated name: g9
+ * ClaimTribePacket — Portado a 1.20.1.
+ * * CLIENTE → SERVIDOR.
+ * * Registra el nombre de una tribu, asigna al dueño y lo anuncia globalmente.
  */
 public class ClaimTribePacket {
 
-    private final UUID   tribeUUID;
-    private final UUID   playerUUID;
+    private final UUID tribeUUID;
+    private final UUID playerUUID;
     private final String tribeName;
 
     public ClaimTribePacket(UUID tribeUUID, UUID playerUUID, String tribeName) {
-        this.tribeUUID  = tribeUUID;
+        this.tribeUUID = tribeUUID;
         this.playerUUID = playerUUID;
-        this.tribeName  = tribeName;
+        this.tribeName = tribeName;
     }
 
-    // -- Codec -----------------------------------------------------------------
+    // ── Codec (Optimizado) ───────────────────────────────────────────────────
+
+    public static void encode(ClaimTribePacket msg, FriendlyByteBuf buf) {
+        buf.writeUUID(msg.tribeUUID);
+        buf.writeUUID(msg.playerUUID);
+        buf.writeUtf(msg.tribeName);
+    }
 
     public static ClaimTribePacket decode(FriendlyByteBuf buf) {
-        UUID   tribe  = UUID.fromString(buf.readUtf());
-        UUID   player = UUID.fromString(buf.readUtf());
-        String name   = buf.readUtf();
-        return new ClaimTribePacket(tribe, player, name);
+        return new ClaimTribePacket(buf.readUUID(), buf.readUUID(), buf.readUtf());
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(this.tribeUUID.toString());
-        buf.writeUtf(this.playerUUID.toString());
-        buf.writeUtf(this.tribeName);
-    }
+    // ── Manejador (Handler) ──────────────────────────────────────────────────
 
-    // -- Handler ---------------------------------------------------------------
-
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
+    public static void handle(ClaimTribePacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
+
+        if (!ctx.getDirection().getReceptionSide().isServer()) return;
+
         ctx.enqueueWork(() -> {
             ServerPlayer sender = ctx.getSender();
-            if (sender == null) {
-                System.out.println("received an invalid message @ClaimTribe :(");
+            // Validación de seguridad: el sender debe ser quien dice ser
+            if (sender == null || !sender.getUUID().equals(msg.playerUUID)) {
+                System.out.println("Intento de reclamo de tribu inválido o malicioso detectado.");
                 return;
             }
 
-            List<KoboldEntity> members = TribeManager.getKoboldList(this.tribeUUID);
+            // Obtenemos todos los miembros de la tribu a través del TribeManager
+            List<KoboldEntity> members = TribeManager.getKoboldList(msg.tribeUUID);
             KoboldColorVariant tribeColor = null;
 
             for (KoboldEntity kobold : members) {
-                if (kobold.isSitting()) continue;
-                EntityDataAccessor<String> ownerKey = BaseNpcEntity.DATA_OWNER_UUID;
-                kobold.getEntityData().set(ownerKey, this.playerUUID.toString());
-                kobold.getEntityData().set(KoboldEntity.DATA_TRIBE_NAME, this.tribeName);
-                String colorStr = (String) kobold.getEntityData().get(KoboldEntity.DATA_COLOR);
-                tribeColor = KoboldColorVariant.valueOf(colorStr);
+                if (kobold.isRemoved()) continue;
+
+                // Actualizar datos de red sincronizados
+                kobold.getEntityData().set(BaseNpcEntity.MASTER_UUID, msg.playerUUID.toString());
+                kobold.getEntityData().set(KoboldEntity.DATA_TRIBE_NAME, msg.tribeName);
+
+                // Determinar el color de la tribu basado en el primer Kobold encontrado
+                if (tribeColor == null) {
+                    String colorStr = kobold.getEntityData().get(KoboldEntity.DATA_COLOR);
+                    tribeColor = KoboldColorVariant.fromString(colorStr);
+                }
             }
 
             if (tribeColor == null) return;
 
-            // Broadcast tribe formation to all online players
-            String senderName = sender.getName().getString();
-            String colorFormatting = tribeColor.getTextColor();
-            Component msg = Component.literal(String.format(
-                    "%s formed the " + colorFormatting + "%s rTribe",
-                    senderName, this.tribeName));
+            // ── Anuncio Global ───────────────────────────────────────────────
 
-            for (Player online : sender.server.getPlayerList().getPlayers()) {
-                online.sendSystemMessage(msg);
-            }
+            // Construir el mensaje con el sistema de componentes moderno
+            MutableComponent annuncement = Component.literal(sender.getName().getString())
+                    .append(" formed the ")
+                    .append(Component.literal(msg.tribeName).withStyle(tribeColor.getChatStyle()))
+                    .append(" Tribe");
 
-            TribeManager.setTribeActive(this.tribeUUID, true);
-            TribeManager.setTribeOwner(this.tribeUUID, sender.getUUID());
+            // Enviar a todos los jugadores online
+            sender.server.getPlayerList().broadcastSystemMessage(annuncement, false);
+
+            // Registrar datos persistentes en el servidor
+            TribeManager.setTribeActive(msg.tribeUUID, true);
+            TribeManager.setTribeOwner(msg.tribeUUID, sender.getUUID());
         });
+
         ctx.setPacketHandled(true);
     }
 }

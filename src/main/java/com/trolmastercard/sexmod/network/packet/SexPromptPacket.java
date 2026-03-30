@@ -1,10 +1,11 @@
 package com.trolmastercard.sexmod.network.packet;
 
+import com.trolmastercard.sexmod.client.handler.SexProposalManager;
+import com.trolmastercard.sexmod.network.ModNetwork;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.Level;
 import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.PacketDistributor;
 
@@ -12,96 +13,88 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * Bidirectional packet used to transmit a sex proposal between players.
- *
- * Client - Server: routes the prompt to the correct target player.
- * Server - Client: displays the proposal UI.
- *
- * Fields:
- *   animationType  - animation/pose string
- *   femaleUUID     - UUID of the "female" player
- *   maleUUID       - UUID of the "male" player
- *   forFemale      - true if packet is destined for the female player
- *
- * Obfuscated name: g4
+ * SexPromptPacket — Portado a 1.20.1.
+ * * Paquete bidireccional para gestionar propuestas entre jugadores.
+ * * CLIENTE -> SERVIDOR: Enruta la petición al jugador objetivo.
+ * * SERVIDOR -> CLIENTE: Muestra la interfaz de propuesta al destinatario.
  */
 public class SexPromptPacket {
 
     private final String animationType;
-    private final UUID   femaleUUID;
-    private final UUID   maleUUID;
+    private final UUID femaleUUID;
+    private final UUID maleUUID;
     private final boolean forFemale;
 
     public SexPromptPacket(String animationType, UUID femaleUUID, UUID maleUUID, boolean forFemale) {
         this.animationType = animationType;
-        this.femaleUUID    = femaleUUID;
-        this.maleUUID      = maleUUID;
-        this.forFemale     = forFemale;
+        this.femaleUUID = femaleUUID;
+        this.maleUUID = maleUUID;
+        this.forFemale = forFemale;
     }
 
-    // -- Codec -----------------------------------------------------------------
+    // ── Serialización (Optimizado para 1.20.1) ───────────────────────────────
+
+    public static void encode(SexPromptPacket msg, FriendlyByteBuf buf) {
+        buf.writeUtf(msg.animationType);
+        buf.writeUUID(msg.femaleUUID);
+        buf.writeUUID(msg.maleUUID);
+        buf.writeBoolean(msg.forFemale);
+    }
 
     public static SexPromptPacket decode(FriendlyByteBuf buf) {
-        String anim   = buf.readUtf();
-        UUID   female = UUID.fromString(buf.readUtf());
-        UUID   male   = UUID.fromString(buf.readUtf());
-        boolean ff    = buf.readBoolean();
-        return new SexPromptPacket(anim, female, male, ff);
+        return new SexPromptPacket(
+                buf.readUtf(),
+                buf.readUUID(),
+                buf.readUUID(),
+                buf.readBoolean()
+        );
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(this.animationType);
-        buf.writeUtf(this.femaleUUID.toString());
-        buf.writeUtf(this.maleUUID.toString());
-        buf.writeBoolean(this.forFemale);
-    }
+    // ── Manejador (Handler) ───────────────────────────────────────────────────
 
-    // -- Handler ---------------------------------------------------------------
-
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
+    public static void handle(SexPromptPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
 
         if (ctx.getDirection().getReceptionSide().isClient()) {
-            // Server - Client: show the proposal UI
-            ctx.enqueueWork(() -> handleClient());
-            ctx.setPacketHandled(true);
-            return;
+            // LADO CLIENTE: Recibimos la invitación del servidor
+            ctx.enqueueWork(() -> {
+                DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> handleClient(msg));
+            });
+        } else {
+            // LADO SERVIDOR: Un jugador envió una petición, hay que redirigirla
+            ctx.enqueueWork(() -> {
+                ServerPlayer sender = ctx.getSender();
+                if (sender == null) return;
+
+                ServerPlayer female = (ServerPlayer) sender.level().getPlayerByUUID(msg.femaleUUID);
+                ServerPlayer male = (ServerPlayer) sender.level().getPlayerByUUID(msg.maleUUID);
+
+                if (female == null || male == null) {
+                    System.out.println("[SexMod] Error: Jugador no encontrado para la propuesta.");
+                    return;
+                }
+
+                // Determinamos quién debe recibir el paquete (el destinatario)
+                ServerPlayer target = msg.forFemale ? female : male;
+
+                // Rebotamos el paquete al cliente del objetivo
+                ModNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> target), msg);
+            });
         }
-
-        // Client - Server: forward to the correct target player
-        ctx.enqueueWork(() -> {
-            ServerPlayer sender = ctx.getSender();
-            if (sender == null) return;
-            Level world = sender.level();
-
-            net.minecraft.world.entity.player.Player female =
-                    world.getPlayerByUUID(this.femaleUUID);
-            net.minecraft.world.entity.player.Player male =
-                    world.getPlayerByUUID(this.maleUUID);
-
-            if (female == null) {
-                System.out.println("Sex prompt invalid -> female player not found");
-                return;
-            }
-            if (male == null) {
-                System.out.println("Sex prompt invalid -> male player not found");
-                return;
-            }
-
-            ServerPlayer target = (ServerPlayer)(this.forFemale ? female : male);
-            ModNetwork.CHANNEL.send(
-                    PacketDistributor.PLAYER.with(() -> target),
-                    new SexPromptPacket(this.animationType, this.femaleUUID,
-                            this.maleUUID, this.forFemale));
-        });
         ctx.setPacketHandled(true);
     }
 
-    @OnlyIn(Dist.CLIENT)
-    private void handleClient() {
-        SexProposalManager.getInstance().addProposal(
-                new SexProposalManager.Proposal(
-                        this.animationType, this.femaleUUID,
-                        this.maleUUID, this.forFemale));
+    /** * Lógica exclusiva de cliente para evitar errores NoClassDefFound en el servidor. */
+    private static void handleClient(SexPromptPacket msg) {
+        // Mapeamos los datos al formato que espera el ProposalManager
+        UUID requesterUUID = msg.forFemale ? msg.maleUUID : msg.femaleUUID;
+        UUID targetUUID = msg.forFemale ? msg.femaleUUID : msg.maleUUID;
+
+        SexProposalManager.INSTANCE.showProposal(new SexProposalManager.Proposal(
+                msg.animationType,
+                targetUUID,
+                requesterUUID,
+                msg.forFemale // requesterIsTarget (Depende de tu lógica de visualización de nombres)
+        ));
     }
 }

@@ -1,4 +1,4 @@
-package com.trolmastercard.sexmod.command;
+package com.trolmastercard.sexmod.command; // Te sugiero meterlo en un paquete de comandos
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
@@ -7,21 +7,14 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
-
-import java.util.List;
+import net.minecraft.world.phys.Vec3;
 
 /**
- * LocateGoblinLairCommand - /locatenearestgoblinlair
- * Finds the nearest goblin lair entity (GoblinEntity with aX==true) and reports its position.
- * Ported from gn.class (Fapcraft 1.12.2 v1.1) to 1.20.1 Brigadier.
- *
- * Original:
- *   CommandBase.func_71517_b()  - getName()
- *   ICommandSender.func_145747_a() - source.sendSuccess(Component, false)
- *   e3 - GoblinEntity (goblin lair/boss entity)
- *   e3.aX - goblin.isLairBoss (boolean marking this goblin as a lair boss)
+ * LocateGoblinLairCommand — Portado a 1.20.1 (Brigadier).
+ * * Encuentra la guarida Goblin (GoblinEntity jefe) más cercana cargada en memoria.
  */
 public class LocateGoblinLairCommand {
 
@@ -34,43 +27,42 @@ public class LocateGoblinLairCommand {
 
     private static int execute(CommandContext<CommandSourceStack> ctx) {
         CommandSourceStack source = ctx.getSource();
-        Entity executor = source.getEntity();
+        ServerLevel level = source.getLevel(); // Obtenemos el nivel correcto de forma segura
 
-        // Check dimension
-        if (executor != null && executor.level().dimension() != Level.OVERWORLD) {
-            String dimName = (executor.level().dimension() == Level.NETHER) ? "Nether" : "End";
-            source.sendFailure(Component.literal(
-                    "goblin lairs don't exist in the " + dimName));
-            return 0;
+        // 1. Verificamos la dimensión directamente desde el nivel del comando
+        if (level.dimension() != Level.OVERWORLD) {
+            String dimName = (level.dimension() == Level.NETHER) ? "Nether" : "End";
+            source.sendFailure(Component.literal("Goblin lairs don't exist in the " + dimName));
+            return 0; // 0 significa que el comando falló
         }
 
-        // Find nearest lair boss in server entity list
         GoblinEntity nearest = null;
-        List<GoblinEntity> goblins = source.getServer()
-                .getAllLevels()
-                .iterator().next()
-                .getEntitiesOfClass(GoblinEntity.class,
-                        executor != null
-                                ? executor.getBoundingBox().inflate(5000)
-                                : net.minecraft.world.phys.AABB.ofSize(
-                                net.minecraft.world.phys.Vec3.ZERO, 10000, 10000, 10000));
+        double nearestDistSqr = Double.MAX_VALUE;
+        Vec3 sourcePos = source.getPosition();
 
-        for (GoblinEntity g : goblins) {
-            if (!g.isLairBoss()) continue;
-            if (nearest == null
-                    || g.distanceToSqr(source.getPosition()) < nearest.distanceToSqr(source.getPosition())) {
-                nearest = g;
+        // 2. Iteramos SOLO por las entidades cargadas en memoria.
+        // ¡Cero lag, no escanea chunks enteros ni físicas!
+        for (Entity entity : level.getAllEntities()) {
+            if (entity instanceof GoblinEntity goblin && goblin.isLairBoss()) {
+                double distSqr = goblin.distanceToSqr(sourcePos);
+                if (distSqr < nearestDistSqr) {
+                    nearest = goblin;
+                    nearestDistSqr = distSqr;
+                }
             }
         }
 
         if (nearest == null) {
-            source.sendFailure(Component.literal("No nearby goblin lair found uwu"));
+            // Nota: Si el chunk donde está la guarida no está cargado por ningún jugador, no la encontrará.
+            source.sendFailure(Component.literal("No nearby loaded goblin lair found uwu"));
             return 0;
         }
 
+        // 3. Éxito
         BlockPos pos = nearest.blockPosition();
         source.sendSuccess(() -> Component.literal(String.format(
-                "goblin lair found at %d %d %d", pos.getX(), pos.getY(), pos.getZ())), false);
-        return 1;
+                "Goblin lair found at %d %d %d", pos.getX(), pos.getY(), pos.getZ())), false);
+
+        return 1; // 1 significa que el comando se ejecutó con éxito
     }
 }

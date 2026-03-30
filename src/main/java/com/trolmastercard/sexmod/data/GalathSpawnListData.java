@@ -6,91 +6,94 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Persists Galath and MangleLie spawn positions across sessions.
- * Obfuscated name: fq
+ * GalathSpawnListData — Portado a 1.20.1.
+ * * Persiste las posiciones de spawn de Galath y MangleLie entre sesiones.
+ * * Optimizado para usar arreglos de Longs (BlockPos.asLong) en lugar de entradas individuales.
  */
 public class GalathSpawnListData extends SavedData {
 
-    private static final String DATA_NAME    = "sexmod:galath_spawn_list";
-    private static final String KEY_GALATH   = "";
-    private static final String KEY_MANG     = "mang";
+    private static final String DATA_NAME = "sexmod_spawn_data";
 
-    /** Galath (Mommy) spawn positions. */
-    public static final List<BlockPos> GALATH_POSITIONS = new ArrayList<>();
-
-    /** MangleLie spawn positions. */
-    public static final List<BlockPos> MANG_POSITIONS = new ArrayList<>();
-
-    // -- SavedData lifecycle ---------------------------------------------------
+    // Nota: Eliminamos el 'static' para que cada dimensión sea independiente.
+    private final List<BlockPos> galathPositions = new ArrayList<>();
+    private final List<BlockPos> mangPositions = new ArrayList<>();
 
     public GalathSpawnListData() {}
 
+    // ── Lógica de Carga y Guardado (NBT) ─────────────────────────────────────
+
     public static GalathSpawnListData load(CompoundTag tag) {
         GalathSpawnListData data = new GalathSpawnListData();
-        CompoundTag inner = tag.getCompound(DATA_NAME);
-        readPositions(inner, KEY_GALATH, GALATH_POSITIONS);
-        readPositions(inner, KEY_MANG,   MANG_POSITIONS);
+
+        // Cargamos posiciones de Galath
+        long[] gPosArray = tag.getLongArray("GalathPositions");
+        for (long l : gPosArray) {
+            data.galathPositions.add(BlockPos.of(l));
+        }
+
+        // Cargamos posiciones de MangleLie
+        long[] mPosArray = tag.getLongArray("MangPositions");
+        for (long l : mPosArray) {
+            data.mangPositions.add(BlockPos.of(l));
+        }
+
         return data;
     }
 
     @Override
     public CompoundTag save(CompoundTag tag) {
-        CompoundTag inner = new CompoundTag();
-        writePositions(inner, KEY_GALATH, GALATH_POSITIONS);
-        writePositions(inner, KEY_MANG,   MANG_POSITIONS);
-        tag.put(DATA_NAME, inner);
+        // Guardamos Galath como LongArray (Mucho más eficiente)
+        List<Long> gLongs = galathPositions.stream().map(BlockPos::asLong).toList();
+        tag.putLongArray("GalathPositions", gLongs);
+
+        // Guardamos MangleLie
+        List<Long> mLongs = mangPositions.stream().map(BlockPos::asLong).toList();
+        tag.putLongArray("MangPositions", mLongs);
+
         return tag;
     }
 
-    // -- Helpers ---------------------------------------------------------------
+    // ── Getters y Helpers ────────────────────────────────────────────────────
 
-    public static void addPosition(BlockPos pos, List<BlockPos> list) {
-        list.add(pos);
+    public List<BlockPos> getGalathPositions() { return galathPositions; }
+    public List<BlockPos> getMangPositions() { return mangPositions; }
+
+    public void addGalathPos(BlockPos pos) {
+        galathPositions.add(pos);
+        this.setDirty(); // VITAL: Avisa a Minecraft que debe guardar el archivo en disco
     }
 
-    private static void writePositions(CompoundTag tag, String prefix, List<BlockPos> list) {
-        tag.putInt("sexmod:pos_amount" + prefix, list.size());
-        for (int i = 0; i < list.size(); i++) {
-            BlockPos p = list.get(i);
-            tag.putInt("sexmod:x" + prefix + i, p.getX());
-            tag.putInt("sexmod:y" + prefix + i, p.getY());
-            tag.putInt("sexmod:z" + prefix + i, p.getZ());
-        }
-    }
-
-    private static void readPositions(CompoundTag tag, String prefix, List<BlockPos> list) {
-        list.clear();
-        int count = tag.getInt("sexmod:pos_amount" + prefix);
-        for (int i = 0; i < count; i++) {
-            int x = tag.getInt("sexmod:x" + prefix + i);
-            int y = tag.getInt("sexmod:y" + prefix + i);
-            int z = tag.getInt("sexmod:z" + prefix + i);
-            list.add(new BlockPos(x, y, z));
-        }
-    }
-
-    // -- Forge events ---------------------------------------------------------
-
-    @SubscribeEvent
-    public void onWorldSave(LevelEvent.Save event) {
-        if (!(event.getLevel() instanceof ServerLevel level)) return;
-        level.getDataStorage().computeIfAbsent(
+    /** * Método estático para obtener los datos de una dimensión específica. */
+    public static GalathSpawnListData get(ServerLevel level) {
+        return level.getDataStorage().computeAbsent(
                 GalathSpawnListData::load,
                 GalathSpawnListData::new,
-                DATA_NAME).setDirty();
+                DATA_NAME
+        );
     }
 
-    @SubscribeEvent
-    public void onWorldLoad(LevelEvent.Load event) {
-        if (!(event.getLevel() instanceof ServerLevel level)) return;
-        level.getDataStorage().computeIfAbsent(
-                GalathSpawnListData::load,
-                GalathSpawnListData::new,
-                DATA_NAME);
+    // ── Manejo de Eventos (Automático) ───────────────────────────────────────
+
+    @Mod.EventBusSubscriber(modid = "sexmod", bus = Mod.EventBusSubscriber.Bus.FORGE)
+    public static class Events {
+
+        @SubscribeEvent
+        public static void onLevelSave(LevelEvent.Save event) {
+            // No necesitamos forzar nada aquí, SavedData se guarda solo si llamamos a setDirty()
+        }
+
+        @SubscribeEvent
+        public static void onLevelLoad(LevelEvent.Load event) {
+            if (event.getLevel() instanceof ServerLevel level) {
+                // Pre-cargamos los datos apenas se carga la dimensión
+                GalathSpawnListData.get(level);
+            }
+        }
     }
 }

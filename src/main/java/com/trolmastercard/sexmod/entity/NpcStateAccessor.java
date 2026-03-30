@@ -1,70 +1,52 @@
-package com.trolmastercard.sexmod.entity;
+package com.trolmastercard.sexmod.entity; // Sugerencia de carpeta para que esté junto a tus entidades
 
 import com.trolmastercard.sexmod.registry.AnimState;
 import javax.annotation.Nullable;
 import java.util.UUID;
 
 /**
- * NpcStateAccessor - Interfaz de Acceso de Estado de NPC.
- * Portado a 1.20.1.
- * * Expone los campos de estado de animación compartidos entre BaseNpcEntity
- * y sus subclases para coordinar interacciones complejas.
+ * NpcStateAccessor — Portado a 1.20.1.
+ * * Interfaz que expone los campos de estado compartidos.
+ * * Permite que el Renderizador acceda a los datos de la entidad de forma segura.
  */
 public interface NpcStateAccessor {
 
-    // =========================================================================
-    //  Objetivo de Interacción
-    // =========================================================================
+    // ── Pareja de Interacción ────────────────────────────────────────────────
 
-    /** * Devuelve el UUID del jugador/NPC actualmente interactuando de forma cercana con esta entidad.
-     * @return UUID del objetivo, o null si está inactiva.
-     */
+    /** Devuelve el UUID del jugador vinculado, o null si está libre. */
     @Nullable
-    UUID getInteractionTargetUUID();
+    UUID getSexPartnerUUID();
 
-    /** * Establece el UUID del objetivo de interacción. Pasa null para limpiar y terminar el evento.
-     */
-    void setInteractionTargetUUID(@Nullable UUID partnerUUID);
+    /** Vincula a un jugador/NPC por su UUID. */
+    void setSexPartnerUUID(@Nullable UUID partnerUUID);
 
-    // =========================================================================
-    //  Modelos y Apariencia
-    // =========================================================================
+    // ── Modelo y Ropa ────────────────────────────────────────────────────────
 
-    /** Devuelve el índice de ropa/modelo actual. */
+    /** Devuelve el índice de ropa/modelo actual (usado para variantes). */
     int getModelIndex();
 
-    /** Establece el índice de ropa/modelo. */
+    /** Cambia el índice de ropa. */
     void setModelIndex(int index);
 
-    // =========================================================================
-    //  Índices de Animación
-    // =========================================================================
+    // ── Control de Animación ─────────────────────────────────────────────────
 
-    /** Devuelve el índice numérico crudo usado internamente por la máquina de estados. */
+    /** Índice crudo para la máquina de estados de GeckoLib. */
     int getAnimationIndex();
 
-    /** Establece el índice numérico crudo de la animación actual. */
     void setAnimationIndex(int index);
 
-    // =========================================================================
-    //  Contador de Finalización de Evento
-    // =========================================================================
+    // ── Contador de Clímax ───────────────────────────────────────────────────
 
-    /** * Devuelve el contador de frames para la etapa final de la interacción (clímax/resolución).
-     */
-    int getFinishCounter();
+    /** Contador de frames para la animación de clímax/cum. */
+    int getCumCounter();
 
-    /** * Establece el contador de frames de la etapa de resolución.
-     */
-    void setFinishCounter(int count);
+    void setCumCounter(int count);
 
-    // =========================================================================
-    //  Estado de Animación Principal (AnimState)
-    // =========================================================================
+    // ── Estado de Animación (Enum) ───────────────────────────────────────────
 
-    /** Establece el estado de animación de alto nivel del diccionario AnimState. */
+    /** Cambia el estado lógico (ej: de IDLE a START_THROWING). */
     void setAnimState(AnimState state);
 
-    /** Devuelve el estado actual de animación de alto nivel. */
+    /** Devuelve el estado lógico actual. */
     AnimState getAnimState();
 }

@@ -1,40 +1,22 @@
-package com.trolmastercard.sexmod.client.model;
+package com.trolmastercard.sexmod.client.model; // Ajusta a tu paquete de modelos
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.trolmastercard.sexmod.client.model.IBoneAccessor; // Asegúrate de la ruta correcta
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
-import net.minecraft.client.model.geom.builders.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.model.geom.builders.CubeDeformation;
+import net.minecraft.client.model.geom.builders.CubeListBuilder;
+import net.minecraft.client.model.geom.builders.LayerDefinition;
+import net.minecraft.client.model.geom.builders.MeshDefinition;
+import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.world.entity.Entity;
 
 /**
- * StaffHeadBoneModel - ported from cf.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * A two-part legacy model used as the "head" attachment on the Staff item.
- * It implements {@link IBoneAccessor} so the NPC hand-renderer can retrieve its
- * root {@link ModelPart} for direct rendering.
- *
- * Parts:
- *   a (root pivot)       - pivot at (-5, -/2, 0)   - effectively (-5, 1.5708, 0)
- *   b (child, rotated)   - pivot at (-1, -3, 1), UV(0,0) box (-1,-3,-1, 2-6-2)
- *   c (empty secondary)  - pivot at (0,0,0), no boxes
- *
- * Field mapping:
- *   a - rootPart        (the root pivot rendered on first call to func_78088_a)
- *   b - headPart        (child with actual cube + xRot=0, yRot=-/2, zRot=0)
- *   c - secondaryPart   (empty pivot)
- *
- * In 1.12.2:
- *   ModelBase / ModelRenderer   - EntityModel<T> / ModelPart
- *   func_78793_a(x,y,z)        - PartPose.offset(x,y,z)
- *   func_78792_a(child)         - parent.addOrReplaceChild()
- *   field_78795_f/g/h           - rotX/Y/Z on PartPose.offsetAndRotation
- *   ModelBox(..., inflate, mirror) - CubeListBuilder.addBox(..., CubeDeformation)
- *   func_78785_a(scale)         - modelPart.render(poseStack, consumer, light, overlay, ...)
- *   implements at              - implements IBoneAccessor
- *   a() returns a              - getBoneRoot() returns rootPart
+ * StaffHeadBoneModel — Portado a 1.20.1.
+ * * Modelo "legacy" de dos partes usado como el cabezal del ítem Bastón.
+ * * Implementa IBoneAccessor para que el renderizador de la mano pueda obtener su raíz.
  */
 public class StaffHeadBoneModel extends EntityModel<Entity> implements IBoneAccessor {
 
@@ -42,66 +24,62 @@ public class StaffHeadBoneModel extends EntityModel<Entity> implements IBoneAcce
     private final ModelPart secondaryPart;
 
     public StaffHeadBoneModel(ModelPart root) {
-        this.rootPart      = root.getChild("root");
+        this.rootPart = root.getChild("root");
         this.secondaryPart = root.getChild("secondary");
     }
 
-    // =========================================================================
-    //  LayerDefinition
-    // =========================================================================
+    // ── Fábrica de Capas (LayerDefinition) ───────────────────────────────────
 
-    public static net.minecraft.client.model.geom.builders.LayerDefinition createBodyLayer() {
+    public static LayerDefinition createBodyLayer() {
         MeshDefinition mesh = new MeshDefinition();
         PartDefinition root = mesh.getRoot();
 
-        // Root pivot: offset(-5, -/2 - 1.5708, 0)
-        // The original uses func_78793_a(-5, 1.5708, 0) which is a POSITION offset,
-        // but combined with the yRot=-/2 on child b it effectively becomes a rotation.
+        // Pivote raíz: desplazamiento de (-5.0, 1.5708, 0.0)
         PartDefinition rootDef = root.addOrReplaceChild("root",
-            CubeListBuilder.create(),
-            PartPose.offset(-5.0F, 1.5708F, 0.0F));
+                CubeListBuilder.create(),
+                PartPose.offset(-5.0F, 1.5708F, 0.0F)
+        );
 
-        // Child b: pivot at (-1, -3, 1), yRot = -/2, cube UV(0,0) at (-1,-3,-1) 2-6-2
+        // Hijo rotado: pivote en (-1, -3, 1), rotado 90 grados en Y, caja de 2x6x2
         rootDef.addOrReplaceChild("head",
-            CubeListBuilder.create()
-                .texOffs(0, 0)
-                .addBox(-1.0F, -3.0F, -1.0F, 2, 6, 2, new CubeDeformation(0.0F)),
-            PartPose.offsetAndRotation(-1.0F, -3.0F, 1.0F,
-                0.0F, (float) Math.PI / 2.0F, 0.0F));
+                CubeListBuilder.create()
+                        .texOffs(0, 0)
+                        // 1.20.1: Flotantes explícitos
+                        .addBox(-1.0F, -3.0F, -1.0F, 2.0F, 6.0F, 2.0F, new CubeDeformation(0.0F)),
+                PartPose.offsetAndRotation(-1.0F, -3.0F, 1.0F,
+                        0.0F, (float) Math.PI / 2.0F, 0.0F)
+        );
 
-        // Empty secondary pivot at (0,0,0)
+        // Pivote secundario vacío en el origen
         root.addOrReplaceChild("secondary",
-            CubeListBuilder.create(),
-            PartPose.offset(0.0F, 0.0F, 0.0F));
+                CubeListBuilder.create(),
+                PartPose.offset(0.0F, 0.0F, 0.0F)
+        );
 
         return LayerDefinition.create(mesh, 64, 32);
     }
 
-    // =========================================================================
-    //  EntityModel overrides
-    // =========================================================================
+    // ── EntityModel ──────────────────────────────────────────────────────────
 
     @Override
     public void setupAnim(Entity entity, float limbSwing, float limbSwingAmount,
                           float ageInTicks, float netHeadYaw, float headPitch) {
-        // No per-tick animation
+        // Sin animación por tick; controlado externamente
     }
 
     @Override
     public void renderToBuffer(PoseStack poseStack, VertexConsumer consumer,
                                int packedLight, int packedOverlay,
                                float red, float green, float blue, float alpha) {
-        rootPart.render(poseStack, consumer, packedLight, packedOverlay, red, green, blue, alpha);
-        secondaryPart.render(poseStack, consumer, packedLight, packedOverlay, red, green, blue, alpha);
+        this.rootPart.render(poseStack, consumer, packedLight, packedOverlay, red, green, blue, alpha);
+        this.secondaryPart.render(poseStack, consumer, packedLight, packedOverlay, red, green, blue, alpha);
     }
 
-    // =========================================================================
-    //  IBoneAccessor  (original: at.a())
-    // =========================================================================
+    // ── IBoneAccessor ────────────────────────────────────────────────────────
 
-    /** Returns the root ModelPart so the hand-renderer can position it correctly. */
+    // 🚨 CORREGIDO: Usando el estándar getRootBone() de tus otras clases
     @Override
-    public ModelPart getBoneRoot() {
-        return rootPart;
+    public ModelPart getRootBone() {
+        return this.rootPart;
     }
 }

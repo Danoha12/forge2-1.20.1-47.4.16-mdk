@@ -1,78 +1,73 @@
 package com.trolmastercard.sexmod.network.packet;
 
-import com.trolmastercard.sexmod.BaseNpcEntity;
-import com.trolmastercard.sexmod.entity.GalathSexEntity; // Mantenemos el nombre para que conecte con JennyEntity
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
+import com.trolmastercard.sexmod.entity.GalathSexEntity;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
-import net.minecraftforge.server.ServerLifecycleHooks;
 
-import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * StartGalathSexPacket - Paquete de Red de Interacción.
- * Portado a 1.20.1.
- * * Enviado CLIENTE -> SERVIDOR.
- * * Instruye a todas las instancias NPC del lado del servidor vinculadas al jugador
- * a iniciar su secuencia de interacción (ej. ir a la cama), si implementan la interfaz.
+ * StartGalathSexPacket — Portado a 1.20.1.
+ * * CLIENTE → SERVIDOR.
+ * * Instruye a todas las instancias de GalathSexEntity que pertenecen a este jugador
+ * para que inicien su secuencia de acercamiento.
  */
 public class StartGalathSexPacket {
 
-    private final UUID    masterUUID;
-    private final boolean valid;
-
-    // =========================================================================
-    //  Constructores
-    // =========================================================================
+    private final UUID masterUUID;
 
     public StartGalathSexPacket(UUID masterUUID) {
         this.masterUUID = masterUUID;
-        this.valid      = true;
     }
 
-    // =========================================================================
-    //  Codificador / Decodificador (Codec)
-    // =========================================================================
+    // ── Codec (Optimizado con UUID nativo) ───────────────────────────────────
+
+    public static void encode(StartGalathSexPacket msg, FriendlyByteBuf buf) {
+        buf.writeUUID(msg.masterUUID);
+    }
 
     public static StartGalathSexPacket decode(FriendlyByteBuf buf) {
-        UUID uuid = UUID.fromString(buf.readUtf());
-        return new StartGalathSexPacket(uuid);
+        return new StartGalathSexPacket(buf.readUUID());
     }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(masterUUID.toString());
-    }
+    // ── Manejador (Handler) ──────────────────────────────────────────────────
 
-    // =========================================================================
-    //  Manejador (Handler)
-    // =========================================================================
-
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
+    public static void handle(StartGalathSexPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
+
+        // Solo procesar en el lado del servidor
+        if (!ctx.getDirection().getReceptionSide().isServer()) return;
+
         ctx.enqueueWork(() -> {
-            if (!valid) {
-                // Limpiamos el log de la consola para que sea profesional
-                System.out.println("[Tribu/Network] Mensaje de red inválido @StartInteraction :(");
+            ServerPlayer sender = ctx.getSender();
+            if (sender == null) return;
+
+            // 1. Verificación de Seguridad (Anti-Cheat)
+            // Evitamos que un jugador envíe un paquete falso con el UUID de OTRO jugador
+            // para activar a sus NPCs a distancia.
+            if (!sender.getUUID().equals(msg.masterUUID)) {
+                System.err.println("[SexMod] Seguridad: " + sender.getName().getString() +
+                        " intentó iniciar una secuencia de Galath ajena.");
                 return;
             }
 
-            // Ejecutamos la lógica en el hilo principal del servidor
-            ServerLifecycleHooks.getCurrentServer().execute(() -> {
-                // Buscamos a todas las NPCs que le pertenecen a este jugador
-                ArrayList<BaseNpcEntity> npcs = BaseNpcEntity.getAllWithMaster(masterUUID);
+            // 2. Ejecutar la acción
+            // ctx.enqueueWork ya se ejecuta en el hilo principal del servidor,
+            // así que no necesitamos ServerLifecycleHooks.execute()
+            List<BaseNpcEntity> npcs = BaseNpcEntity.getAllWithMaster(msg.masterUUID);
 
-                for (BaseNpcEntity npc : npcs) {
-                    if (npc.level().isClientSide()) continue;
-
-                    // Si el NPC implementa nuestra interfaz de interacción (Como JennyEntity)
-                    if (npc instanceof GalathSexEntity interactionNpc) {
-                        // Disparamos el evento (que en Jenny pone atBed = true)
-                        interactionNpc.onGalathSexStart();
-                    }
+            for (BaseNpcEntity npc : npcs) {
+                // Al estar en el servidor y buscar en getAllWithMaster, ya sabemos que no es ClientSide
+                if (npc instanceof GalathSexEntity galathSex && npc.isAlive() && !npc.isRemoved()) {
+                    galathSex.startSexApproach(); // fg.a() original
                 }
-            });
+            }
         });
+
         ctx.setPacketHandled(true);
     }
 }

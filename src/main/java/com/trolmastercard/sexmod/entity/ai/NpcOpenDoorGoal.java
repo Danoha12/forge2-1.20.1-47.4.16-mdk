@@ -1,150 +1,132 @@
 package com.trolmastercard.sexmod.entity.ai;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.material.Material;
-import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.Node;
-import net.minecraft.navigation.GroundPathNavigation;
+import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 
 import java.util.EnumSet;
 
 /**
- * NpcOpenDoorGoal - ported from hz.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Allows NPCs to open nearby wooden doors that are along their navigation path.
- * Closes the door again once the entity has passed through.
- *
- * 1.12.2 - 1.20.1 migrations:
- *   - EntityAIBase - Goal; setMutexBits - setFlags(EnumSet)
- *   - EntityLiving - Mob
- *   - PathNavigateGround - GroundPathNavigation
- *   - func_75250_a() - canUse()
- *   - func_75253_b() - canContinueToUse()
- *   - func_75249_e() - start()
- *   - func_75246_d() - tick()
- *   - func_75251_c() - stop()
- *   - path.func_75879_b() - path.isDone()
- *   - pathNavigator.func_179686_g() - navigator.isDone() (inverted: !isDone == active)
- *   - path.func_75873_e() - path.getNextNodeIndex()
- *   - path.func_75874_d() - path.getNodeCount()
- *   - path.func_75877_a(i) - path.getNode(i)
- *   - pathPoint.field_75839_a/b/c - node.x/y/z
- *   - entity.func_70092_e(x, y, z) - entity.distanceToSqr(x, y, z)
- *   - DoorBlock.func_176512_a(world, pos, open) - doorBlock.setOpen(entity, world, state, pos, open)
- *   - Material.field_151575_d - Material.WOOD
- *   - BlockPos.field_177992_a - BlockPos.ZERO
- *   - new BlockPos(entity) - entity.blockPosition()
- *   - blockPos.func_177984_a() - blockPos.above()
+ * NpcOpenDoorGoal — Portado a 1.20.1.
+ * * Permite a los NPCs abrir y cerrar puertas de madera en su camino.
+ * * Usa Tags de bloque en lugar de Materiales (obsoleto).
  */
 public class NpcOpenDoorGoal extends Goal {
 
     protected final Mob mob;
     protected BlockPos doorPos = BlockPos.ZERO;
     protected DoorBlock doorBlock;
-    /** True once the door was opened and the entity has crossed through. */
-    boolean crossed;
-    float initDx;
-    float initDz;
-    /** Ticks remaining before we close the door again. */
-    int closeCountdown = 10;
+    protected boolean crossed;
+    protected float initDx;
+    protected float initDz;
+    protected int closeCountdown = 10;
 
     public NpcOpenDoorGoal(Mob mob) {
         this.mob = mob;
-        if (!(mob.getNavigation() instanceof GroundPathNavigation))
-            throw new IllegalArgumentException("Unsupported mob type for NpcOpenDoorGoal");
-        setFlags(EnumSet.of(Goal.Flag.MOVE));
+        // Verificamos que el NPC pueda caminar por tierra
+        if (!(mob.getNavigation() instanceof GroundPathNavigation)) {
+            throw new IllegalArgumentException("NpcOpenDoorGoal requiere GroundPathNavigation");
+        }
+        this.setFlags(EnumSet.of(Flag.MOVE));
     }
 
-    // -- Goal lifecycle ---------------------------------------------------------
+    // ── Lógica de Activación ─────────────────────────────────────────────────
 
     @Override
     public boolean canUse() {
-        // Scan 10-block radius for wooden doors
-        boolean foundDoor = false;
-        outer:
-        for (int dx = -3; dx < 5; dx++) {
-            for (int dz = -3; dz < 5; dz++) {
-                BlockPos p = mob.blockPosition().offset(dx, 0, dz);
-                BlockState state = mob.level.getBlockState(p);
-                if (state.getBlock() instanceof DoorBlock && state.getMaterial() == Material.WOOD) {
-                    foundDoor = true;
-                    break outer;
-                }
-            }
-        }
-        if (!foundDoor) return false;
+        if (!mob.horizontalCollision) return false;
 
         GroundPathNavigation nav = (GroundPathNavigation) mob.getNavigation();
         Path path = nav.getPath();
+
         if (path == null || path.isDone() || !nav.isInProgress()) return false;
 
-        int limit = Math.min(path.getNextNodeIndex() + 2, path.getNodeCount());
-        for (int i = 0; i < limit; i++) {
+        // Escaneamos los nodos cercanos en la ruta
+        for (int i = 0; i < Math.min(path.getNextNodeIndex() + 2, path.getNodeCount()); ++i) {
             Node node = path.getNode(i);
-            BlockPos candidate = new BlockPos(node.x, node.y + 1, node.z);
-            if (mob.distanceToSqr(candidate.getX(), mob.getY(), candidate.getZ()) <= 2.25D) {
-                DoorBlock db = getDoorAt(candidate);
-                if (db != null) {
-                    this.doorPos   = candidate;
-                    this.doorBlock = db;
-                    return true;
-                }
+            this.doorPos = new BlockPos(node.x, node.y, node.z);
+
+            // Si la puerta está a una distancia razonable
+            if (mob.distanceToSqr(this.doorPos.getX(), mob.getY(), this.doorPos.getZ()) <= 2.25D) {
+                this.doorBlock = getWoodenDoor(this.doorPos);
+                if (this.doorBlock != null) return true;
             }
         }
 
-        // Fallback: check position above current block
-        BlockPos above = mob.blockPosition().above();
-        this.doorPos   = above;
-        this.doorBlock = getDoorAt(above);
+        // Fallback: verificar el bloque frente a los ojos
+        this.doorPos = mob.blockPosition().above();
+        this.doorBlock = getWoodenDoor(this.doorPos);
         return this.doorBlock != null;
     }
 
     @Override
     public boolean canContinueToUse() {
-        return closeCountdown >= 0;
+        return !this.crossed && this.closeCountdown > 0;
     }
+
+    // ── Ciclo de Vida del Goal ───────────────────────────────────────────────
 
     @Override
     public void start() {
-        crossed = false;
-        initDx  = (float)(doorPos.getX() + 0.5 - mob.getX());
-        initDz  = (float)(doorPos.getZ() + 0.5 - mob.getZ());
-        BlockState state = mob.level.getBlockState(doorPos);
-        doorBlock.setOpen(mob, mob.level, state, doorPos, true);
+        this.crossed = false;
+        this.closeCountdown = 10;
+
+        // Calculamos el vector inicial para saber cuándo cruzamos la puerta
+        this.initDx = (float) ((double) this.doorPos.getX() + 0.5D - mob.getX());
+        this.initDz = (float) ((double) this.doorPos.getZ() + 0.5D - mob.getZ());
+
+        // Abrir la puerta
+        setDoorState(true);
     }
 
     @Override
     public void tick() {
-        float dx = (float)(doorPos.getX() + 0.5 - mob.getX());
-        float dz = (float)(doorPos.getZ() + 0.5 - mob.getZ());
-        // Cross-product sign tells us when the mob has passed the door
-        if (initDx * dx + initDz * dz < 0.0F) {
-            if (--closeCountdown <= 0) {
-                BlockState state = mob.level.getBlockState(doorPos);
-                doorBlock.setOpen(mob, mob.level, state, doorPos, false);
-                crossed = true;
+        float dx = (float) ((double) this.doorPos.getX() + 0.5D - mob.getX());
+        float dz = (float) ((double) this.doorPos.getZ() + 0.5D - mob.getZ());
+
+        // Producto escalar para detectar si el NPC ya pasó el umbral
+        float dotProduct = this.initDx * dx + this.initDz * dz;
+
+        if (dotProduct < 0.0F) {
+            this.crossed = true;
+        }
+
+        if (this.crossed) {
+            if (this.closeCountdown-- <= 0) {
+                setDoorState(false); // Cerrar tras el NPC
             }
         }
     }
 
     @Override
     public void stop() {
-        closeCountdown = 10;
+        // Aseguramos que la puerta se cierre si el Goal se cancela abruptamente
+        if (this.doorBlock != null && getWoodenDoor(this.doorPos) != null) {
+            setDoorState(false);
+        }
     }
 
-    // -- Helpers ----------------------------------------------------------------
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private DoorBlock getDoorAt(BlockPos pos) {
-        BlockState state = mob.level.getBlockState(pos);
-        Block block = state.getBlock();
-        if (block instanceof DoorBlock && state.getMaterial() == Material.WOOD) {
-            return (DoorBlock) block;
+    private DoorBlock getWoodenDoor(BlockPos pos) {
+        BlockState state = mob.level().getBlockState(pos);
+        // En 1.20.1 usamos Tags para verificar si es madera
+        if (state.getBlock() instanceof DoorBlock && state.is(BlockTags.WOODEN_DOORS)) {
+            return (DoorBlock) state.getBlock();
         }
         return null;
+    }
+
+    private void setDoorState(boolean open) {
+        BlockState state = mob.level().getBlockState(this.doorPos);
+        if (state.getBlock() instanceof DoorBlock) {
+            ((DoorBlock) state.getBlock()).setOpen(mob, mob.level(), state, this.doorPos, open);
+        }
     }
 }

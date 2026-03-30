@@ -1,333 +1,223 @@
 package com.trolmastercard.sexmod.data;
-import com.trolmastercard.sexmod.BaseNpcEntity;
 
-import com.trolmastercard.sexmod.Main;
+import com.mojang.logging.LogUtils;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.network.ModNetwork;
-import com.trolmastercard.sexmod.network.packet.SyncOwnershipPacket;
-import net.minecraft.core.BlockPos;
+import com.trolmastercard.sexmod.network.packet.OwnershipSyncPacket;
+import com.trolmastercard.sexmod.util.ModConstants;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
-import net.minecraft.world.entity.player.Player;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.server.ServerLifecycleHooks;
-import org.apache.logging.log4j.Level;
+import org.slf4j.Logger;
 
+import javax.annotation.Nullable;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * GalathOwnershipData - ported from v.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * {@link SavedData} that tracks which player owns which NPC (galath), plus:
- *  - Last cum-dosage timestamp per player (for cooldown logic)
- *  - Set of "mango-owned" NPC UUIDs
- *
- * Keys used in world storage:
- *  - {@code "sexmod:galath_owner_ship"} - the SavedData record name
- *  - {@code "sexmod:ownershipdata"}     - NBT sub-compound for player-NPC map
- *  - {@code "sexmod:mangownershipdata"} - NBT sub-compound for mango-owners
- *
- * In 1.20.1 the data is attached to the overworld's DataStorage; retrieve via:
- * <pre>
- *   level.getServer().overworld().getDataStorage()
- *        .computeIfAbsent(GalathOwnershipData::load,
- *                         GalathOwnershipData::new, KEY);
- * </pre>
+ * GalathOwnershipData — Portado a 1.20.1.
+ * * Maneja el vínculo 1:1 entre un jugador y su chica principal.
  */
-@Mod.EventBusSubscriber(modid = Main.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@Mod.EventBusSubscriber(modid = ModConstants.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class GalathOwnershipData extends SavedData {
 
-    // =========================================================================
-    //  Storage keys
-    // =========================================================================
+    private static final Logger LOGGER = LogUtils.getLogger();
+    public static final String KEY = "galath_ownership_data";
 
-    public static final String KEY              = "sexmod:galath_owner_ship";
-    public static final String KEY_OWNERSHIP    = "sexmod:ownershipdata";
-    public static final String KEY_MANGO        = "sexmod:mangownershipdata";
-
-    // =========================================================================
-    //  In-memory state
-    // =========================================================================
-
-    /** Cooldown duration in game ticks (0 = no cooldown enforced here). */
-    public static final long COOLDOWN_TICKS = 0L;
-
-    /** Whether this is currently enabled globally. */
-    public static boolean globallyEnabled = true;
-
-    /**
-     * Bidirectional map: playerUUID - npcUUID.
-     * Left key = player UUID, Right value = NPC UUID.
-     */
+    // ── Estado en Memoria ────────────────────────────────────────────────────
     private static final BiMap<UUID, UUID> ownershipMap = new BiMap<>();
+    private static final Map<UUID, Long> lastDosageTime = new ConcurrentHashMap<>();
+    private static final Set<UUID> mangoOwners = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-    /** Last cum-dosage world-time per player UUID. */
-    private static final HashMap<UUID, Long> lastDosageTime = new HashMap<>();
+    // ── API de Propiedad (Ownership) ─────────────────────────────────────────
 
-    /** Set of NPC UUIDs that are "mango-owned" (special state flag). */
-    private static final HashSet<UUID> mangoOwned = new HashSet<>();
-
-    // =========================================================================
-    //  Constructors
-    // =========================================================================
-
-    public GalathOwnershipData() {}
-
-    // =========================================================================
-    //  Static API - ownership
-    // =========================================================================
-
-    public static void clearAll() {
-        mangoOwned.clear();
-        ownershipMap.clear();
+    public static void setOwnership(Player player, BaseNpcEntity npc) {
+        ownershipMap.put(player.getUUID(), npc.getUUID());
+        markDirtyStatic();
     }
 
-    /** Marks {@code npcUUID} as mango-owned. */
-    public static void markMangoOwned(UUID npcUUID) {
-        UUID ownerUUID = ownershipMap.getByRight(npcUUID);
-        if (ownerUUID == null) return;
-        mangoOwned.add(ownerUUID);
-    }
-
-    public static boolean isMangoOwned(UUID playerUUID) {
-        return mangoOwned.contains(playerUUID);
-    }
-
-    /**
-     * Returns true if the NPC's owner is online, in the same dimension,
-     * and within 60 blocks.
-     */
-    public static boolean isOwnerNearby(BaseNpcEntity npc) {
-        UUID ownerUUID = ownershipMap.getByRight(npc.getUUID());
-        if (ownerUUID == null) return false;
-        Level world = npc.level();
-        Player player = world.getPlayerByUUID(ownerUUID);
-        if (player == null) return true; // owner exists but not loaded  assume nearby
-        if (player.level() != world) return false;
-        return player.distanceTo(npc) <= 60.0F;
-    }
-
-    public static boolean isOwner(Player player, BaseNpcEntity npc) {
-        return npc.getUUID().equals(ownershipMap.getByKey(player.getUUID()));
-    }
-
-    /** Removes any entry associated with {@code npc} and notifies its owner. */
     public static void removeOwnership(BaseNpcEntity npc) {
-        UUID ownerUUID = ownershipMap.getByRight(npc.getUUID());
-        npc.level().removeEntity(npc, net.minecraft.world.entity.Entity.RemovalReason.KILLED);
-        if (ownerUUID == null) return;
-        ownershipMap.removeByKey(ownerUUID);
-        Player owner = ServerLifecycleHooks.getCurrentServer()
-            .overworld().getPlayerByUUID(ownerUUID);
-        if (owner instanceof ServerPlayer sp) {
-            ModNetwork.CHANNEL.send(
-                PacketDistributor.PLAYER.with(() -> sp),
-                new SyncOwnershipPacket(false));
+        UUID playerUUID = ownershipMap.getByValue(npc.getUUID());
+        if (playerUUID != null) {
+            ownershipMap.removeByKey(playerUUID);
+
+            ServerPlayer sp = ServerLifecycleHooks.getCurrentServer().getPlayerList().getPlayer(playerUUID);
+            if (sp != null) {
+                ModNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> sp), new OwnershipSyncPacket(false));
+            }
         }
+        npc.remove(Entity.RemovalReason.DISCARDED);
+        markDirtyStatic();
     }
 
     public static boolean hasNpc(UUID playerUUID) {
         return ownershipMap.getByKey(playerUUID) != null;
     }
 
-    /** Returns the NPC UUID owned by {@code playerUUID}, or null. */
-    @org.jetbrains.annotations.Nullable
+    @Nullable
     public static UUID getNpcForPlayer(UUID playerUUID) {
-        return ownershipMap.getByRight(playerUUID);
+        return ownershipMap.getByKey(playerUUID);
     }
 
-    /** Returns the NPC UUID owned by {@code npcUUID}'s righthand key, or null. */
-    @org.jetbrains.annotations.Nullable
+    @Nullable
     public static UUID getOwnerForNpc(UUID npcUUID) {
-        return ownershipMap.getByKey(npcUUID);
+        return ownershipMap.getByValue(npcUUID);
     }
 
-    @org.jetbrains.annotations.Nullable
-    public static UUID getNpcForPlayer(Player player) {
-        if (player == null) return null;
-        return getOwnerForNpc(player.getUUID());
+    public static boolean isOwner(Player player, BaseNpcEntity npc) {
+        return npc.getUUID().equals(ownershipMap.getByKey(player.getUUID()));
     }
 
-    public static void setOwnership(UUID playerUUID, UUID npcUUID) {
-        ownershipMap.put(playerUUID, npcUUID);
-    }
+    // ── Lógica de Mango & Cooldown ───────────────────────────────────────────
 
-    public static void setOwnership(Player player, BaseNpcEntity npc) {
-        if (player == null || npc == null) return;
-        setOwnership(player.getUUID(), npc.getUUID());
-    }
-
-    public static void removeOwnership(UUID playerUUID) {
-        ownershipMap.removeByKey(playerUUID);
-    }
-
-    public static void removeOwnership(Player player) {
-        if (player == null) return;
-        removeOwnership(player.getUUID());
-    }
-
-    // =========================================================================
-    //  Cooldown
-    // =========================================================================
-
-    public static boolean isCooldownActive(UUID playerUUID, net.minecraft.world.level.Level level) {
-        if (!isMangoOwned(playerUUID)) return false;
-        Long time = lastDosageTime.get(playerUUID);
-        if (time == null) return true;
-        return (level.getGameTime() - time) > COOLDOWN_TICKS;
-    }
-
-    public static void setLastDosageTime(UUID playerUUID, Long worldTime) {
-        if (playerUUID == null) {
-            Main.LOGGER.warn("tried to save last cum dosage time on NULL player");
-            return;
+    public static void markMangoOwned(UUID npcUUID) {
+        UUID ownerUUID = ownershipMap.getByValue(npcUUID);
+        if (ownerUUID != null) {
+            mangoOwners.add(ownerUUID);
+            markDirtyStatic();
         }
+    }
+
+    public static boolean isMangoOwned(UUID playerUUID) {
+        return mangoOwners.contains(playerUUID);
+    }
+
+    public static void setLastDosageTime(UUID playerUUID, long worldTime) {
         lastDosageTime.put(playerUUID, worldTime);
+        markDirtyStatic();
     }
 
-    // =========================================================================
-    //  Snapshot helper for SyncOwnershipPacket
-    // =========================================================================
-
-    public static boolean getOwnershipSnapshot(UUID playerUUID) {
-        return hasNpc(playerUUID);
-    }
-
-    // =========================================================================
-    //  Forge event handlers
-    // =========================================================================
-
-    /** Tick handler - cleans up ownership entries for NPCs that no longer exist. */
-    @SubscribeEvent
-    public static void onServerTick(net.minecraftforge.event.TickEvent.ServerTickEvent event) {
-        if (event.phase != net.minecraftforge.event.TickEvent.Phase.END) return;
-        var server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null) return;
-
-        Level world = server.overworld();
-        List<UUID> stale = new ArrayList<>();
-
-        for (Map.Entry<UUID, UUID> entry : ownershipMap.entrySet()) {
-            UUID playerUUID = entry.getKey();
-            UUID npcUUID    = entry.getValue();
-            Player player = world.getPlayerByUUID(playerUUID);
-            if (player == null) continue;
-            if (BaseNpcEntity.getById(npcUUID) == null) stale.add(playerUUID);
-        }
-
-        for (UUID playerUUID : stale) {
-            ownershipMap.removeByKey(playerUUID);
-            ServerPlayer sp = server.getPlayerList().getPlayer(playerUUID);
-            if (sp != null) {
-                ModNetwork.CHANNEL.send(
-                    PacketDistributor.PLAYER.with(() -> sp),
-                    new SyncOwnershipPacket(false));
-            }
-        }
-    }
-
-    // =========================================================================
-    //  SavedData serialisation
-    // =========================================================================
-
-    @Override
-    public CompoundTag save(CompoundTag tag) {
-        CompoundTag ownership = new CompoundTag();
-        ownership.putInt("amount", ownershipMap.size());
-        int i = 0;
-        for (Map.Entry<UUID, UUID> entry : ownershipMap.entrySet()) {
-            UUID playerUUID = entry.getKey();
-            UUID npcUUID    = entry.getValue();
-            Long dosage = lastDosageTime.getOrDefault(playerUUID, 0L);
-
-            ownership.putUUID("galath"         + i, npcUUID);
-            ownership.putUUID("master"         + i, playerUUID);
-            ownership.putLong("lastcumdosage"  + i, dosage);
-            i++;
-        }
-
-        CompoundTag mango = new CompoundTag();
-        int j = 0;
-        for (UUID uuid : mangoOwned) {
-            mango.putUUID("mang" + j++, uuid);
-        }
-
-        tag.put(KEY_OWNERSHIP, ownership);
-        tag.put(KEY_MANGO,     mango);
-        return tag;
-    }
+    // ── Persistencia (NBT) ───────────────────────────────────────────────────
 
     public static GalathOwnershipData load(CompoundTag tag) {
         GalathOwnershipData data = new GalathOwnershipData();
+        ownershipMap.clear();
+        lastDosageTime.clear();
+        mangoOwners.clear();
 
-        CompoundTag ownership = tag.getCompound(KEY_OWNERSHIP);
-        int amount = ownership.getInt("amount");
-        for (int i = 0; i < amount; i++) {
-            if (!ownership.hasUUID("master" + i) || !ownership.hasUUID("galath" + i)) {
-                Main.LOGGER.fatal("OMFG WHOOP WHOOP SAVING DIDNT WORK CORRECTLY AAAAAAAAAAA");
-                continue;
+        // Forma moderna de leer listas de diccionarios en 1.20.1
+        if (tag.contains("OwnershipList", Tag.TAG_LIST)) {
+            ListTag list = tag.getList("OwnershipList", Tag.TAG_COMPOUND);
+            for (int i = 0; i < list.size(); i++) {
+                CompoundTag entry = list.getCompound(i);
+                if (entry.hasUUID("Player") && entry.hasUUID("NPC")) {
+                    UUID pId = entry.getUUID("Player");
+                    ownershipMap.put(pId, entry.getUUID("NPC"));
+                    if (entry.contains("Cooldown")) {
+                        lastDosageTime.put(pId, entry.getLong("Cooldown"));
+                    }
+                }
             }
-            UUID playerUUID = ownership.getUUID("master" + i);
-            UUID npcUUID    = ownership.getUUID("galath" + i);
-            long dosage     = ownership.getLong("lastcumdosage" + i);
-            ownershipMap.put(playerUUID, npcUUID);
-            lastDosageTime.put(playerUUID, dosage);
         }
 
-        CompoundTag mango = tag.getCompound(KEY_MANGO);
-        for (int j = 0; mango.hasUUID("mang" + j); j++) {
-            mangoOwned.add(mango.getUUID("mang" + j));
+        if (tag.contains("MangoList", Tag.TAG_LIST)) {
+            ListTag mangoList = tag.getList("MangoList", Tag.TAG_COMPOUND);
+            for (int j = 0; j < mangoList.size(); j++) {
+                mangoOwners.add(mangoList.getCompound(j).getUUID("UUID"));
+            }
         }
 
-        // Clear stale sub-tags
-        tag.put(KEY_MANGO,     new CompoundTag());
-        tag.put(KEY_OWNERSHIP, new CompoundTag());
         return data;
     }
 
-    // =========================================================================
-    //  Minimal BiMap helper (replaces the obfuscated gl<UUID,UUID> class)
-    // =========================================================================
-
-    private static final class BiMap<L, R> implements Iterable<Map.Entry<L, R>> {
-        private final HashMap<L, R> ltr = new HashMap<>();
-        private final HashMap<R, L> rtl = new HashMap<>();
-
-        public void put(L left, R right) {
-            ltr.put(left, right);
-            rtl.put(right, left);
+    @Override
+    public CompoundTag save(CompoundTag tag) {
+        ListTag list = new ListTag();
+        for (Map.Entry<UUID, UUID> entry : ownershipMap.entrySet()) {
+            CompoundTag entryTag = new CompoundTag();
+            entryTag.putUUID("Player", entry.getKey());
+            entryTag.putUUID("NPC", entry.getValue());
+            entryTag.putLong("Cooldown", lastDosageTime.getOrDefault(entry.getKey(), 0L));
+            list.add(entryTag);
         }
+        tag.put("OwnershipList", list);
 
-        @org.jetbrains.annotations.Nullable
-        public R getByKey(L left)  { return ltr.get(left); }
-
-        @org.jetbrains.annotations.Nullable
-        public L getByRight(R right) { return rtl.get(right); }
-
-        public void removeByKey(L left) {
-            R right = ltr.remove(left);
-            if (right != null) rtl.remove(right);
+        ListTag mangoList = new ListTag();
+        for (UUID uuid : mangoOwners) {
+            CompoundTag uTag = new CompoundTag();
+            uTag.putUUID("UUID", uuid);
+            mangoList.add(uTag);
         }
+        tag.put("MangoList", mangoList);
 
-        public void removeByRight(R right) {
-            L left = rtl.remove(right);
-            if (left != null) ltr.remove(left);
+        return tag;
+    }
+
+    // ── Helpers y Eventos ────────────────────────────────────────────────────
+
+    private static void markDirtyStatic() {
+        if (ServerLifecycleHooks.getCurrentServer() != null) {
+            ServerLevel overworld = ServerLifecycleHooks.getCurrentServer().overworld();
+            overworld.getDataStorage().computeIfAbsent(GalathOwnershipData::load, GalathOwnershipData::new, KEY).setDirty();
         }
+    }
 
-        public void clear() { ltr.clear(); rtl.clear(); }
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
 
-        public int size() { return ltr.size(); }
+        // Limpieza segura: 200 ticks (10 segundos)
+        if (ServerLifecycleHooks.getCurrentServer().getTickCount() % 200 == 0) {
+            List<UUID> toRemove = new ArrayList<>();
+            ServerLevel world = ServerLifecycleHooks.getCurrentServer().overworld();
 
-        @Override
-        public java.util.Iterator<Map.Entry<L, R>> iterator() {
-            return ltr.entrySet().iterator();
+            for (Map.Entry<UUID, UUID> entry : ownershipMap.entrySet()) {
+                Entity npc = world.getEntity(entry.getValue());
+                // IMPORTANTE: Solo borramos el vínculo si la entidad ESTÁ CARGADA y ESTÁ MUERTA.
+                // Si getEntity devuelve null, significa que el chunk se descargó, NO que murió.
+                if (npc != null && (npc.isRemoved() || !npc.isAlive())) {
+                    toRemove.add(entry.getKey());
+                }
+            }
+
+            if (!toRemove.isEmpty()) {
+                for (UUID pId : toRemove) {
+                    ownershipMap.removeByKey(pId);
+                }
+                markDirtyStatic();
+            }
         }
+    }
 
-        public Set<Map.Entry<L, R>> entrySet() { return ltr.entrySet(); }
+    @SubscribeEvent
+    public static void onWorldUnload(LevelEvent.Unload event) {
+        if (event.getLevel() instanceof ServerLevel sl && sl.dimension() == Level.OVERWORLD) {
+            ownershipMap.clear();
+            lastDosageTime.clear();
+            mangoOwners.clear();
+        }
+    }
+
+    // ── Utilidad BiMap ───────────────────────────────────────────────────────
+
+    private static class BiMap<K, V> implements Iterable<Map.Entry<K, V>> {
+        private final Map<K, V> kToV = new ConcurrentHashMap<>();
+        private final Map<V, K> vToK = new ConcurrentHashMap<>();
+
+        public void put(K key, V value) {
+            kToV.put(key, value);
+            vToK.put(value, key);
+        }
+        public V getByKey(K key) { return kToV.get(key); }
+        public K getByValue(V value) { return vToK.get(value); }
+        public void removeByKey(K key) {
+            V val = kToV.remove(key);
+            if (val != null) vToK.remove(val);
+        }
+        public void clear() { kToV.clear(); vToK.clear(); }
+        public Set<Map.Entry<K, V>> entrySet() { return kToV.entrySet(); }
+        @Override public Iterator<Map.Entry<K, V>> iterator() { return kToV.entrySet().iterator(); }
     }
 }

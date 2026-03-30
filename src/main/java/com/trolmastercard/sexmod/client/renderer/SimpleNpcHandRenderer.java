@@ -1,111 +1,96 @@
-package com.trolmastercard.sexmod.client.renderer;
-import com.trolmastercard.sexmod.BaseNpcEntity;
+package com.trolmastercard.sexmod.client.renderer; // Ajusta a tu paquete de renderizadores
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
-import net.minecraft.item.ItemStack;
 import net.minecraft.world.item.ItemStack;
-import software.bernie.geckolib.model.GeoModel;
+import net.minecraft.world.item.UseAnim;
+import software.bernie.geckolib.model.GeoModel; // Asumiendo que NpcHandRenderer maneja GeoRenderer
 
 /**
- * Ported from dl.java (1.12.2 - 1.20.1)
- * NpcHandRenderer subclass that shifts the NPC's render origin 1.5 units down.
- *
- * Original: {@code class dl extends dm}
- * dm = NpcHandRenderer
- *
- * The original override methods (GL translate/rotate) are translated to PoseStack
- * equivalents for 1.20.1.
+ * SimpleNpcHandRenderer — Portado a 1.20.1.
+ * * Subclase que desplaza el origen de renderizado de la mano hacia abajo
+ * * y aplica transformaciones hardcodeadas para diferentes posturas de ítems.
  */
 public class SimpleNpcHandRenderer extends NpcHandRenderer {
 
     public SimpleNpcHandRenderer(EntityRendererProvider.Context context,
-                                  GeoModel<BaseNpcEntity> model,
-                                  double shadowRadius) {
+                                 GeoModel<BaseNpcEntity> model,
+                                 double shadowRadius) {
         super(context, model, shadowRadius);
     }
 
-    /** Shifts render origin 1.5 units down the Y axis before any further rendering. */
+    /** * Desplaza el origen de renderizado 1.5 unidades hacia abajo en el eje Y.
+     * Compensa las diferencias de pivote entre Blockbench y el motor del juego.
+     */
     @Override
     protected void applyBaseTranslation(PoseStack poseStack) {
         poseStack.translate(0.0F, -1.5F, 0.0F);
     }
 
-    // -- Item rotations --------------------------------------------------------
+    // ── Rotaciones de Ítems ──────────────────────────────────────────────────
 
-    /**
-     * Rotates the held item in main/offhand.
-     * Right hand: +90- X when held, +180- X at rest.
-     * Adds a Y-offset when held.
-     */
     @Override
-    protected void applyHeldItemTransform(PoseStack poseStack,
-                                          boolean isMainHand,
-                                          net.minecraft.world.item.ItemStack itemStack) {
+    protected void applyHeldItemTransform(PoseStack poseStack, boolean isMainHand, ItemStack itemStack) {
         super.applyHeldItemTransform(poseStack, isMainHand, itemStack);
 
-        // Skip bow/arrow actions handled by super
+        // Omitir acciones de arco/ballesta que se manejan en la clase padre
         if (isActionItem(itemStack)) return;
 
         if (isMainHand) {
-            poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(90.0F));
-            poseStack.translate(0.0, 0.239, -0.1);
+            poseStack.mulPose(Axis.XP.rotationDegrees(90.0F));
+            poseStack.translate(0.0D, 0.239D, -0.1D);
         } else {
-            poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(180.0F));
-            poseStack.translate(0.0, 0.1, -0.07);
+            poseStack.mulPose(Axis.XP.rotationDegrees(180.0F));
+            poseStack.translate(0.0D, 0.1D, -0.07D);
         }
     }
 
-    /** Rotates the empty-hand in main/offhand. */
     @Override
     protected void applyEmptyHandTransform(PoseStack poseStack, boolean isMainHand) {
         if (isMainHand) {
-            poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(90.0F));
-            poseStack.translate(0.2, -0.2, 0.0);
+            poseStack.mulPose(Axis.XP.rotationDegrees(90.0F));
+            poseStack.translate(0.2D, -0.2D, 0.0D);
         } else {
-            poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(180.0F));
-            poseStack.translate(0.0, 0.0, 0.0);
+            poseStack.mulPose(Axis.XP.rotationDegrees(180.0F));
+            // poseStack.translate(0.0D, 0.0D, 0.0D); // Redundante, omitido por eficiencia
         }
     }
 
-    /**
-     * Two-hand item (weapon/shield) pose.
-     * Main hand: rotate 180 Y, 90 X; with offhand: additional rotation+translate.
-     * Off hand:  translate + complex rotation sequence.
-     */
     @Override
-    protected void applyTwoHandedTransform(PoseStack poseStack,
-                                            boolean isMainHand,
-                                            boolean isOffHand) {
+    protected void applyTwoHandedTransform(PoseStack poseStack, boolean isMainHand, boolean isOffHand) {
         if (isMainHand) {
-            poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(180.0F));
-            poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(90.0F));
+            poseStack.mulPose(Axis.YP.rotationDegrees(180.0F));
+            poseStack.mulPose(Axis.XP.rotationDegrees(90.0F));
+
             if (isOffHand) {
-                poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(-90.0F));
-                poseStack.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(90.0F));
-                poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(-20.0F));
-                poseStack.translate(0.4, 0.0, 0.228);
+                poseStack.mulPose(Axis.YP.rotationDegrees(-90.0F));
+                poseStack.mulPose(Axis.ZP.rotationDegrees(90.0F));
+                poseStack.mulPose(Axis.XP.rotationDegrees(-20.0F));
+                poseStack.translate(0.4D, 0.0D, 0.228D);
             }
         } else {
-            poseStack.translate(0.0, 0.282, 0.141);
+            poseStack.translate(0.0D, 0.282D, 0.141D);
+
             if (isOffHand) {
-                poseStack.translate(0.165, -0.45, 0.0);
-                poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(-90.0F));
-                poseStack.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(-90.0F));
-                poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(180.0F));
-                poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(-27.0F));
+                poseStack.translate(0.165D, -0.45D, 0.0D);
+                poseStack.mulPose(Axis.XP.rotationDegrees(-90.0F));
+                poseStack.mulPose(Axis.ZP.rotationDegrees(-90.0F));
+                poseStack.mulPose(Axis.YP.rotationDegrees(180.0F));
+                poseStack.mulPose(Axis.YP.rotationDegrees(-27.0F));
             } else {
-                poseStack.translate(0.0, 0.0, -0.05);
+                poseStack.translate(0.0D, 0.0D, -0.05D);
             }
         }
     }
 
-    // -- Helpers ---------------------------------------------------------------
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private boolean isActionItem(net.minecraft.world.item.ItemStack stack) {
+    private boolean isActionItem(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return false;
-        var action = stack.getUseAnimation();
-        return action == net.minecraft.world.item.UseAnim.BOW
-                || action == net.minecraft.world.item.UseAnim.CROSSBOW;
+
+        UseAnim action = stack.getUseAnimation();
+        return action == UseAnim.BOW || action == UseAnim.CROSSBOW;
     }
 }

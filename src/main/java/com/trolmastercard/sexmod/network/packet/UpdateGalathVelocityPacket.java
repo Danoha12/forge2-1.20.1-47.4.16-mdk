@@ -1,9 +1,9 @@
-package com.trolmastercard.sexmod.network.packet;
-import com.trolmastercard.sexmod.BaseNpcEntity;
+package com.trolmastercard.sexmod.network.packet; // Ajusta a tu paquete de red
 
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
-import com.trolmastercard.sexmod.entity.GalathEntity;
+import com.trolmastercard.sexmod.entity.GalathEntity; // Asegúrate de tener esta clase
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkEvent;
 
@@ -11,77 +11,69 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * UpdateGalathVelocityPacket - ported from ct.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * CLIENT - SERVER.
- *
- * Sent during a Galath sex sequence to update her velocity/position offset on the server.
- * The server resolves the Galath by UUID, then calls {@code galath.d(Vec3d)}
- * (the velocity-update method, renamed {@code updateSexVelocity}) only if the
- * sender is the Galath's current sex partner.
- *
- * Comment in original source: {@code @UpdateVelocity}.
- *
- * Field mapping:
- *   c = valid    (fromBytes guard)
- *   b = pos      (Vec3d - Vec3)
- *   a = npcUUID  (UUID)
- *
- * In 1.12.2:
- *   IMessage/IMessageHandler              - FriendlyByteBuf encode/decode + handle
- *   ByteBufUtils.readUTF8String / write   - FriendlyByteBuf.readUtf / writeUtf
- *   Vec3d.field_72450_a/b/c               - Vec3.x/y/z
- *   em.a(UUID)                            - BaseNpcEntity.getNpcByUUID(UUID)
- *   f_.ab()                               - galath.getSexPartner()
- *   f_.d(Vec3d)                           - galath.updateSexVelocity(Vec3)
- *   FMLCommonHandler.func_152344_a        - ctx.enqueueWork
+ * UpdateGalathVelocityPacket — Portado a 1.20.1.
+ * * CLIENTE -> SERVIDOR.
+ * * Actualiza el offset de posición/velocidad de Galath durante una secuencia.
+ * * Validado para que solo el compañero actual pueda enviar las actualizaciones.
  */
 public class UpdateGalathVelocityPacket {
 
-    private final Vec3 pos;
-    private final UUID npcUUID;
+    public final Vec3 pos;
+    public final UUID npcUUID;
 
     public UpdateGalathVelocityPacket(Vec3 pos, UUID npcUUID) {
-        this.pos     = pos;
+        this.pos = pos;
         this.npcUUID = npcUUID;
     }
 
-    // =========================================================================
-    //  Encode / Decode
-    // =========================================================================
+    // ── Codec (¡Libre de Strings!) ───────────────────────────────────────────
 
     public static void encode(UpdateGalathVelocityPacket msg, FriendlyByteBuf buf) {
         buf.writeDouble(msg.pos.x);
         buf.writeDouble(msg.pos.y);
         buf.writeDouble(msg.pos.z);
-        buf.writeUtf(msg.npcUUID.toString());
+        buf.writeUUID(msg.npcUUID); // Nativo y ultra rápido
     }
 
     public static UpdateGalathVelocityPacket decode(FriendlyByteBuf buf) {
-        Vec3 pos = new Vec3(buf.readDouble(), buf.readDouble(), buf.readDouble());
-        UUID uuid = UUID.fromString(buf.readUtf());
-        return new UpdateGalathVelocityPacket(pos, uuid);
+        return new UpdateGalathVelocityPacket(
+                new Vec3(buf.readDouble(), buf.readDouble(), buf.readDouble()),
+                buf.readUUID()
+        );
     }
 
-    // =========================================================================
-    //  Handle  (SERVER side)
-    // =========================================================================
+    // ── Manejador (Servidor) ─────────────────────────────────────────────────
 
     public static void handle(UpdateGalathVelocityPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
+
+        // Chequeo temprano de lado de red
+        if (ctx.getDirection().getReceptionSide().isClient()) {
+            System.out.println("[SexMod] Error: El cliente recibió un @UpdateVelocity de forma inesperada.");
+            ctx.setPacketHandled(true);
+            return;
+        }
+
         ctx.enqueueWork(() -> {
-            if (ctx.getSender() == null) {
-                System.out.println("received an invalid message @UpdateVelocity :(");
-                return;
-            }
+            ServerPlayer sender = ctx.getSender();
+            if (sender == null) return;
+
+            // Buscar a la entidad por su UUID
             BaseNpcEntity npc = BaseNpcEntity.getNpcByUUID(msg.npcUUID);
+
+            // Pattern matching moderno de Java 16+
             if (!(npc instanceof GalathEntity galath)) return;
 
-            // Only allow update from the current sex partner
-            if (ctx.getSender().equals(galath.getSexPartner())) {
+            // Seguridad: Solo permitimos la actualización si el remitente es el compañero actual.
+            // Comparamos por UUID en lugar de .equals() para evitar problemas de desincronización de instancias.
+            if (galath.getSexPartner() != null && sender.getUUID().equals(galath.getSexPartner().getUUID())) {
                 galath.updateSexVelocity(msg.pos);
+            } else {
+                System.out.println("[SexMod] Advertencia: Jugador " + sender.getName().getString() +
+                        " intentó mover a Galath sin ser su compañero.");
             }
         });
+
         ctx.setPacketHandled(true);
     }
 }

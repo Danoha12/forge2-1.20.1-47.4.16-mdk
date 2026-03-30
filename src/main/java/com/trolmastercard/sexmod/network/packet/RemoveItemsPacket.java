@@ -4,72 +4,70 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.network.NetworkEvent;
-import net.minecraftforge.server.ServerLifecycleHooks;
 
-import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * RemoveItemsPacket - ported from t.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Sent CLIENT - SERVER to remove a specific count of a specific item type
- * from the target player's inventory.
- *
- * The server searches for the first slot that contains an item matching
- * {@code itemStack}'s type and shrinks it by the stack's count.
+ * RemoveItemsPacket — Portado a 1.20.1.
+ * * CLIENTE → SERVIDOR.
+ * * Remueve una cantidad específica de un ítem del inventario del jugador.
+ * * Usado para pagar el "costo" de las acciones especiales en la GUI.
  */
 public class RemoveItemsPacket {
 
-    private final UUID      playerUUID;
-    private final ItemStack itemStack;
+  private final ItemStack stackToRemove;
 
-    // =========================================================================
-    //  Constructor
-    // =========================================================================
+  public RemoveItemsPacket(ItemStack stackToRemove) {
+    this.stackToRemove = stackToRemove;
+  }
 
-    public RemoveItemsPacket(UUID playerUUID, ItemStack itemStack) {
-        this.playerUUID = playerUUID;
-        this.itemStack  = itemStack;
-    }
+  // ── Codec ────────────────────────────────────────────────────────────────
 
-    // =========================================================================
-    //  Codec
-    // =========================================================================
+  public static void encode(RemoveItemsPacket msg, FriendlyByteBuf buf) {
+    // Ya no enviamos el UUID del jugador, el servidor ya sabe quién es
+    buf.writeItem(msg.stackToRemove);
+  }
 
-    public static RemoveItemsPacket decode(FriendlyByteBuf buf) {
-        UUID      uuid  = UUID.fromString(buf.readUtf());
-        ItemStack stack = buf.readItem();
-        return new RemoveItemsPacket(uuid, stack);
-    }
+  public static RemoveItemsPacket decode(FriendlyByteBuf buf) {
+    return new RemoveItemsPacket(buf.readItem());
+  }
 
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(playerUUID.toString());
-        buf.writeItem(itemStack);
-    }
+  // ── Manejador (Handler) ──────────────────────────────────────────────────
 
-    // =========================================================================
-    //  Handler
-    // =========================================================================
+  public static void handle(RemoveItemsPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
+    NetworkEvent.Context ctx = ctxSupplier.get();
 
-    public void handle(Supplier<NetworkEvent.Context> ctxSupplier) {
-        NetworkEvent.Context ctx = ctxSupplier.get();
-        ctx.enqueueWork(() -> {
-            ServerPlayer player = ServerLifecycleHooks.getCurrentServer()
-                .getPlayerList().getPlayer(playerUUID);
-            if (player == null) {
-                System.out.println("received an invalid message @RemoveItems :(");
-                return;
-            }
+    // Solo procesamos en el lado del Servidor
+    if (!ctx.getDirection().getReceptionSide().isServer()) return;
 
-            // Find first slot with a matching item type and shrink it
-            for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-                ItemStack slot = player.getInventory().getItem(i);
-                if (slot.is(itemStack.getItem())) {
-                    slot.shrink(itemStack.getCount());
-                    break;
-                }
-            }
-        });
-        ctx.setPacketHandled(true);
-    }
+    ctx.enqueueWork(() -> {
+      ServerPlayer player = ctx.getSender();
+      if (player == null) return;
+
+      int amountLeft = msg.stackToRemove.getCount();
+
+      // Buscamos en todo el inventario para cobrar el total
+      for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+        if (amountLeft <= 0) break;
+
+        ItemStack slotStack = player.getInventory().getItem(i);
+
+        // Verificamos si es el mismo ítem (ignorando NBT si es necesario)
+        if (slotStack.is(msg.stackToRemove.getItem())) {
+          int toShrink = Math.min(slotStack.getCount(), amountLeft);
+
+          slotStack.shrink(toShrink);
+          amountLeft -= toShrink;
+
+          // Notificar al inventario que hubo un cambio
+          player.getInventory().setItem(i, slotStack);
+        }
+      }
+
+      // Forzar actualización de los slots para el cliente
+      player.containerMenu.broadcastChanges();
+    });
+
+    ctx.setPacketHandled(true);
+  }
 }

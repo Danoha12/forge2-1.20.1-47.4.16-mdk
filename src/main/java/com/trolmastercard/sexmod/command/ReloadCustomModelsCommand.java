@@ -1,63 +1,48 @@
-package com.trolmastercard.sexmod.command;
+package com.trolmastercard.sexmod.command; // Te sugiero agrupar los comandos en su propio paquete
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.trolmastercard.sexmod.network.ModNetwork;
 import com.trolmastercard.sexmod.network.packet.SyncCustomModelsPacket;
-import com.trolmastercard.sexmod.registry.ModelWhitelist;
+import com.trolmastercard.sexmod.registry.ModelWhitelist; // Asegúrate de que esta clase exista
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.server.level.ServerPlayer;
-
-import static net.minecraft.commands.Commands.literal;
+import net.minecraftforge.network.PacketDistributor;
 
 /**
- * ReloadCustomModelsCommand - ported from aw.class (Fapcraft 1.12.2 v1.1) to 1.20.1.
- *
- * Server command: {@code /reloadcustommodels}
- * Required permission level: 2 (operator)
- *
- * Reloads the custom-model whitelist from disk and broadcasts the updated
- * model list to every connected player.
- *
- * Register in your {@code RegisterCommandsEvent}:
- * <pre>
- *   ReloadCustomModelsCommand.register(event.getDispatcher());
- * </pre>
+ * ReloadCustomModelsCommand — Portado a 1.20.1.
+ * * Comando de servidor: /reloadcustommodels
+ * * Nivel de permiso: 2 (Operador)
+ * * Recarga la lista de modelos permitidos y la transmite a todos los jugadores.
  */
 public class ReloadCustomModelsCommand {
 
-    private ReloadCustomModelsCommand() {}
+  private ReloadCustomModelsCommand() {}
 
-    /**
-     * Registers the {@code /reloadcustommodels} literal with the given dispatcher.
-     */
-    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(
-            literal("reloadcustommodels")
-                .requires(src -> src.hasPermission(2))
-                .executes(ReloadCustomModelsCommand::execute)
-        );
-    }
+  /**
+   * Registra el comando literal en el dispatcher.
+   * Llámalo desde tu evento RegisterCommandsEvent.
+   */
+  public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+    dispatcher.register(
+            Commands.literal("reloadcustommodels")
+                    .requires(src -> src.hasPermission(2))
+                    .executes(ReloadCustomModelsCommand::execute)
+    );
+  }
 
-    // =========================================================================
-    //  Execution
-    // =========================================================================
+  // ── Ejecución ────────────────────────────────────────────────────────────
 
-    private static int execute(CommandContext<CommandSourceStack> ctx) {
-        // Reload the whitelist from disk (false = full reload, not incremental)
-        ModelWhitelist.reload(false);
+  private static int execute(CommandContext<CommandSourceStack> ctx) {
+    // Recarga la lista blanca desde el disco
+    ModelWhitelist.reload(false);
 
-        // Broadcast the updated model data to every online player
-        SyncCustomModelsPacket packet = new SyncCustomModelsPacket(ModelWhitelist.getSerializedData());
-        for (ServerPlayer player : ctx.getSource().getServer().getPlayerList().getPlayers()) {
-            ctx.getSource().getServer().execute(() ->
-                ModNetwork.CHANNEL.send(
-                    net.minecraftforge.network.PacketDistributor.PLAYER.with(() -> player),
-                    packet)
-            );
-        }
+    // 🚨 1.20.1: Usamos PacketDistributor.ALL para enviar a todos a la vez.
+    // Cero bucles, cero server.execute() innecesarios. ¡Eficiencia pura!
+    SyncCustomModelsPacket packet = new SyncCustomModelsPacket(ModelWhitelist.getSerializedData());
+    ModNetwork.CHANNEL.send(PacketDistributor.ALL.noArg(), packet);
 
-        return 1; // success
-    }
+    // En Brigadier, devolver 1 significa éxito, 0 significa fallo.
+    return 1;
+  }
 }
