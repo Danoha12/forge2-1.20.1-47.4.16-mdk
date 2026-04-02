@@ -2,10 +2,10 @@ package com.trolmastercard.sexmod.client.renderer.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.trolmastercard.sexmod.client.FakeWorld;
 import com.trolmastercard.sexmod.client.model.entity.GalathModel;
 import com.trolmastercard.sexmod.client.particle.PhysicsParticleRenderer;
-import com.trolmastercard.sexmod.entity.AnimState;
+import com.trolmastercard.sexmod.client.renderer.BaseNpcRenderer;
+import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.GalathEntity;
 import com.trolmastercard.sexmod.util.MathUtil;
 import com.trolmastercard.sexmod.util.RgbaColor;

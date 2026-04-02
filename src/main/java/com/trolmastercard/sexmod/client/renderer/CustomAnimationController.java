@@ -2,8 +2,7 @@ package com.trolmastercard.sexmod.client.renderer; // Ajusta el paquete según t
 
 import software.bernie.geckolib.core.animatable.GeoAnimatable;
 import software.bernie.geckolib.core.animation.AnimationController;
-import software.bernie.geckolib.core.easing.EasingType;
-
+import software.bernie.geckolib.core.animation.EasingType;
 import java.util.function.Function;
 
 /**

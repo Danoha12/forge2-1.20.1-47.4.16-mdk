@@ -124,7 +124,7 @@ public abstract class NpcInventoryEntity extends BaseNpcEntity {
             inventory.setStackInSlot(0, ItemStack.EMPTY);
 
             // 4. Activar la animación visual
-            this.setAnimStateFiltered(com.trolmastercard.sexmod.registry.AnimState.THROW_AWAY);
+            this.setAnimStateFiltered(com.trolmastercard.sexmod.registry.AnimState.THROWN);
         }
     }
     // ── Lógica de Salud y IA ──────────────────────────────────────────────────
@@ -167,7 +167,7 @@ public abstract class NpcInventoryEntity extends BaseNpcEntity {
                 // Aquí deberías tener una lógica para que el NPC camine a su HOME_POS
             }
             case "action.names.setnewhome" -> {
-                ModNetwork.CHANNEL.sendToServer(new SetNpcHomePacket(this.getUUID(), this.blockPosition()));
+                ModNetwork.CHANNEL.sendToServer(new SetNpcHomePacket(this.getUUID(), this.blockPosition().getCenter()));
             }
         }
     }

@@ -2,6 +2,7 @@ package com.trolmastercard.sexmod.client.renderer.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.trolmastercard.sexmod.NpcHandRenderer;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.EllieEntity;
 import com.trolmastercard.sexmod.entity.NpcInventoryEntity;
@@ -19,7 +20,7 @@ import software.bernie.geckolib.model.GeoModel;
  * EllieNpcRenderer — Portado a 1.20.1 / GeckoLib 4.
  * Incluye física de cabello para los huesos: backHair, frontHairL, frontHairR.
  */
-public class EllieNpcRenderer extends NpcHandRenderer<EllieEntity> {
+public class EllieNpcRenderer extends NpcHandRenderer {
 
     private float headRotX = 0.0F;
 

@@ -4,6 +4,7 @@ import com.trolmastercard.sexmod.registry.AnimState;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import software.bernie.geckolib.animatable.GeoEntity;
 import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
 import software.bernie.geckolib.core.animation.*;
 import software.bernie.geckolib.core.object.PlayState;
@@ -11,12 +12,11 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 
 import java.util.UUID;
 
+import static com.trolmastercard.sexmod.registry.AnimState.*;
+
 /**
- * BiaPlayerKobold — Portado a 1.20.1 / GeckoLib 4 y enmascarado (SFW).
- * * Variante de acompañante para el NPC Bia.
- * Secuencias principales:
- * - BACK (Mapeado de Anal): PREP -> WAIT -> START -> SLOW -> FAST -> FINISH.
- * - PRONE_DANCE (Mapeado de Prone Doggy): INTRO -> INSERT -> SOFT -> HARD -> FINISH.
+ * BiaPlayerKobold — Portado a 1.20.1.
+ * Código corregido: Switch expressions modernos y limpieza de controladores.
  */
 public class BiaPlayerKobold extends PlayerKoboldEntity {
 
@@ -30,27 +30,18 @@ public class BiaPlayerKobold extends PlayerKoboldEntity {
     public BiaPlayerKobold(Level level, UUID uuid) { super(level, uuid); }
 
     @Override public float getModelScale() { return 1.5F; }
+    @Override public float getEyeHeight(Pose pose) { return 1.5F; }
 
-    @Override
-    public float getEyeHeight(Pose pose) { return 1.5F; }
+    // ── Lógica de Interacción ──────────────────────────────────────────────────
 
-    // @Override // Descomentar cuando NpcHandModel sea porteado
-    // public NpcHandModel createHandModel(int slot) { return new BiaHandModel(); }
-
-    // @Override // Descomentar si existe en PlayerKoboldEntity
-    // public String getHandTexturePath(int slot) { return "textures/entity/bia/hand.png"; }
-
-    // @Override // Descomentar si el método original es onSexActionRequest
     public boolean onInteractiveActionRequest(String action) {
         switch (action) {
-            case "back" -> { // Antes "anal"
-                setAnimStateFiltered(AnimState.BACK_PREP);
-                setSubAnimState(0, AnimState.BACK_PREP);
+            case "back" -> {
+                setAnimStateFiltered(ANAL_PREPARE);
                 return true;
             }
-            case "dance" -> { // Antes "doggy"
-                setAnimStateFiltered(AnimState.SITDOWN);
-                setSubAnimState(0, AnimState.SITDOWN);
+            case "dance" -> {
+                setAnimStateFiltered(SITDOWN);
                 return true;
             }
         }
@@ -59,8 +50,7 @@ public class BiaPlayerKobold extends PlayerKoboldEntity {
 
     @Override
     public boolean onPlayerInteract(Player player) {
-        // Asumiendo que openActionMenu está en BaseNpcEntity
-        openActionMenu(player, this, new String[]{ "back", "dance" }, false);
+        openActionMenu(player, this, new String[]{ "back", "dance", "action.names.headpat" }, false);
         return true;
     }
 
@@ -68,24 +58,21 @@ public class BiaPlayerKobold extends PlayerKoboldEntity {
     public void onActionSelected(String action, UUID playerId) {
         if ("action.names.headpat".equals(action)) {
             setPartnerUUID(playerId);
-            setAnimStateFiltered(AnimState.HEAD_PAT);
-            setSubAnimState(getArmHeightSlot(), AnimState.HEAD_PAT);
+            setAnimStateFiltered(HEAD_PAT);
         }
     }
 
     @Override
     public AnimState getNextState(AnimState current) {
-        if (current == AnimState.BACK_SLOW)        return AnimState.BACK_FAST;
-        if (current == AnimState.PRONE_DANCE_SOFT)  return AnimState.PRONE_DANCE_HARD;
+        if (current == ANAL_SLOW) return ANAL_FAST;
+        if (current == PRONE_DOGGY_SOFT) return PRONE_DOGGY_HARD;
         return null;
     }
 
     @Override
     public AnimState getCumState(AnimState current) {
-        if (current == AnimState.BACK_SLOW || current == AnimState.BACK_FAST)
-            return AnimState.BACK_FINISH;
-        if (current == AnimState.PRONE_DANCE_SOFT || current == AnimState.PRONE_DANCE_HARD)
-            return AnimState.PRONE_DANCE_FINISH;
+        if (current == ANAL_SLOW || current == ANAL_FAST) return ANAL_CUM;
+        if (current == PRONE_DOGGY_SOFT || current == PRONE_DOGGY_HARD) return PRONE_DOGGY_CUM;
         return null;
     }
 
@@ -93,11 +80,10 @@ public class BiaPlayerKobold extends PlayerKoboldEntity {
 
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar registrar) {
-        ensureControllerInit();
         registrar.add(
                 new AnimationController<>(this, "eyes", 5, state -> {
                     AnimState as = getAnimState();
-                    if (as == AnimState.NULL || as == null) {
+                    if (as == NULL || as == null) {
                         return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.fhappy"));
                     }
                     return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.null"));
@@ -108,14 +94,13 @@ public class BiaPlayerKobold extends PlayerKoboldEntity {
     }
 
     private PlayState movementController(AnimationState<BiaPlayerKobold> state) {
-        AnimState a = getAnimState();
-        if (a != AnimState.NULL && a != null) {
+        AnimState current = getAnimState();
+        if (current != NULL && current != null) {
             return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.null"));
         }
 
-        if (a == AnimState.SIT) return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.sit"));
+        if (current == SIT) return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.sit"));
 
-        // isFallFlying() es el método estándar en 1.20.1 para las Elitras / Vuelo
         if (this.isFallFlying()) {
             return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.fly" + (flyAlt ? "2" : "")));
         }
@@ -129,44 +114,44 @@ public class BiaPlayerKobold extends PlayerKoboldEntity {
     }
 
     private PlayState actionController(AnimationState<BiaPlayerKobold> state) {
-        AnimState a = getAnimState();
-        if (a == null) return PlayState.CONTINUE;
+        AnimState current = getAnimState();
+        if (current == null) return PlayState.CONTINUE;
 
-        // Mapeo SFW -> Archivos JSON originales
-        switch (a) {
-            case STRIP                  -> return state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.strip"));
-            case ATTACK                 -> return state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.attack" + attackCounter));
-            case BOW                    -> return state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.bowcharge"));
-            case RIDE                   -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.ride"));
-            case SIT                    -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.sit"));
-            case THROW_PEARL            -> return state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.throwpearl"));
-            case DOWNED                 -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.downed"));
+        // 🚀 Switch Expression: Devuelve el RawAnimation directamente
+        return switch (current) {
+            case STRIP          -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.strip"));
+            case ATTACK         -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.attack" + attackCounter));
+            case BOW            -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.bowcharge"));
+            case RIDE           -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.ride"));
+            case SIT            -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.sit"));
+            case THROW_PEARL    -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.throwpearl"));
+            case DOWNED         -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.downed"));
 
-            case TALK_EXCITED           -> return state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.talk_horny"));
-            case TALK_IDLE              -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.talk_idle"));
-            case TALK_RESPONSE          -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.talk_response"));
+            case TALK_HORNY     -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.talk_horny"));
+            case TALK_IDLE      -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.talk_idle"));
+            case TALK_RESPONSE  -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.talk_response"));
 
-            // Secuencia BACK (Anal)
-            case BACK_PREP              -> return state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.anal_prepare"));
-            case BACK_WAIT              -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.anal_wait"));
-            case BACK_START             -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.anal_start"));
-            case BACK_SLOW              -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.anal_slow"));
-            case BACK_FAST              -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.anal_fast"));
-            case BACK_FINISH            -> return state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.anal_cum"));
+            // Secuencia ANAL (BACK)
+            case ANAL_PREPARE   -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.anal_prepare"));
+            case ANAL_WAIT      -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.anal_wait"));
+            case ANAL_START     -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.anal_start"));
+            case ANAL_SLOW      -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.anal_slow"));
+            case ANAL_FAST      -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.anal_fast"));
+            case ANAL_CUM       -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.anal_cum"));
 
-            case HEAD_PAT               -> return state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.headpat"));
-            case SITDOWN                -> return state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.sitdown"));
-            case SITDOWNIDLE            -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.sitdownidle"));
+            case HEAD_PAT       -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.headpat"));
+            case SITDOWN        -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.sitdown"));
+            case SITDOWNIDLE    -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.sitdownidle"));
 
-            // Secuencia PRONE_DANCE (Prone Doggy)
-            case PRONE_DANCE_INTRO      -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.prone_doggy_intro"));
-            case PRONE_DANCE_INSERT     -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.prone_doggy_insert"));
-            case PRONE_DANCE_SOFT       -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.prone_doggy_soft"));
-            case PRONE_DANCE_HARD       -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.prone_doggy_hard" + aq));
-            case PRONE_DANCE_FINISH     -> return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.prone_doggy_cum"));
+            // Secuencia PRONE_DOGGY (DANCE)
+            case PRONE_DOGGY_INTRO  -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.prone_doggy_intro"));
+            case PRONE_DOGGY_INSERT -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.prone_doggy_insert"));
+            case PRONE_DOGGY_SOFT   -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.prone_doggy_soft"));
+            case PRONE_DOGGY_HARD   -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.prone_doggy_hard" + aq));
+            case PRONE_DOGGY_CUM    -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bia.prone_doggy_cum"));
 
-            default                     -> return state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.null"));
-        }
+            default             -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bia.null"));
+        };
     }
 
     @Override public AnimatableInstanceCache getAnimatableInstanceCache() { return animCache; }

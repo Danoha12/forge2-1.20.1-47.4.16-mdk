@@ -2,6 +2,8 @@ package com.trolmastercard.sexmod.client.renderer;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
+import com.trolmastercard.sexmod.util.RgbaColor;
+import com.trolmastercard.sexmod.util.VectorMathUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.world.phys.Vec3;

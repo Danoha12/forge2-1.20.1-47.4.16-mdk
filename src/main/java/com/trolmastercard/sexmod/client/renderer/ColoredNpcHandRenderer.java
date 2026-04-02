@@ -1,8 +1,9 @@
 package com.trolmastercard.sexmod.client.renderer; // Ajustar paquete si es necesario
 
+import com.trolmastercard.sexmod.NpcHandRenderer;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.NpcInventoryEntity;
-// import com.trolmastercard.sexmod.client.model.BaseNpcModel; // Descomenta cuando portes el modelo base
+import com.trolmastercard.sexmod.client.model.BaseNpcModel; // Descomenta cuando portes el modelo base
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.core.Vec3i;
 import net.minecraft.world.InteractionHand;
@@ -10,7 +11,7 @@ import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ShieldItem;
 import net.minecraft.world.phys.Vec3;
-import software.bernie.geckolib.cache.object.CoreGeoBone;
+import software.bernie.geckolib.cache.object.GeoBone;
 import software.bernie.geckolib.model.GeoModel;
 
 import java.util.Comparator;
@@ -43,7 +44,7 @@ public abstract class ColoredNpcHandRenderer extends NpcHandRenderer {
      * En GeckoLib 4, esto usualmente se aplica en el render recursivo multiplicando
      * los valores R, G, B en el PoseStack o en el VertexConsumer.
      */
-    protected Vec3i getBoneColor(CoreGeoBone bone) {
+    protected Vec3i getBoneColor(GeoBone bone) {
         if (animatable == null) return WHITE; // En GL4, 'animatable' es la entidad
 
         String name = bone.getName();
@@ -58,21 +59,21 @@ public abstract class ColoredNpcHandRenderer extends NpcHandRenderer {
 
     // ── Utilidades de Huesos Hijos ───────────────────────────────────────────
 
-    protected void showOnlyChildAtIndex(CoreGeoBone parent, int index) {
-        List<CoreGeoBone> children = parent.getChildBones();
+    protected void showOnlyChildAtIndex(GeoBone parent, int index) {
+        List<GeoBone> children = parent.getChildBones();
         for (int i = 0; i < children.size(); i++) {
             children.get(i).setHidden(i != index);
         }
     }
 
-    protected CoreGeoBone getChildAtIndex(CoreGeoBone parent, int index) {
-        List<CoreGeoBone> sorted = parent.getChildBones().stream()
-                .sorted(Comparator.comparingDouble(CoreGeoBone::getPivotY))
+    protected GeoBone getChildAtIndex(GeoBone parent, int index) {
+        List<GeoBone> sorted = parent.getChildBones().stream()
+                .sorted(Comparator.comparingDouble(GeoBone::getPivotY))
                 .toList();
 
-        CoreGeoBone result = null;
+        GeoBone result = null;
         for (int i = 0; i < sorted.size(); i++) {
-            CoreGeoBone child = sorted.get(i);
+            GeoBone child = sorted.get(i);
             child.setHidden(i != index);
             if (i == index) result = child;
         }
@@ -90,7 +91,7 @@ public abstract class ColoredNpcHandRenderer extends NpcHandRenderer {
     // ── Procesamiento de Huesos (Físicas Visuales) ───────────────────────────
 
     @Override
-    protected void onBoneProcess(String boneName, CoreGeoBone bone) {
+    protected void onBoneProcess(String boneName, GeoBone bone) {
         if (animatable == null) return;
 
         // ── Sentado ──

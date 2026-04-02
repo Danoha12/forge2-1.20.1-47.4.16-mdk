@@ -1,6 +1,6 @@
 package com.trolmastercard.sexmod.client.renderer;
 
-import com.trolmastercard.sexmod.entity.BeeNpcEntity;
+import com.trolmastercard.sexmod.entity.BeeEntity;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import software.bernie.geckolib.model.GeoModel;
 
@@ -14,10 +14,10 @@ import java.util.HashSet;
  * malla base ("leaf7" y "leaf8", además de elementos anatómicos) para
  * evitar recortes visuales con el modelo principal.
  */
-public class BeeBodyRenderer extends BaseNpcRenderer<BeeNpcEntity> {
+public class BeeBodyRenderer extends BaseNpcRenderer<BeeEntity> {
 
     // Constructor actualizado para 1.20.1 exigiendo el Context del RenderProvider
-    public BeeBodyRenderer(EntityRendererProvider.Context context, GeoModel<BeeNpcEntity> model) {
+    public BeeBodyRenderer(EntityRendererProvider.Context context, GeoModel<BeeEntity> model) {
         super(context, model, 0.5f); // 0.5f es el tamaño de la sombra por defecto
     }
 

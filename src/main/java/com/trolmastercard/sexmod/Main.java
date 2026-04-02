@@ -1,5 +1,6 @@
 package com.trolmastercard.sexmod;
 
+import com.trolmastercard.sexmod.command.NpcSpawnCommand;
 import com.trolmastercard.sexmod.registry.ModBlocks;
 import com.trolmastercard.sexmod.registry.ModEntities;
 import com.trolmastercard.sexmod.registry.ModItems;
@@ -56,6 +57,9 @@ public class Main {
         } catch (IOException e) {
             LOGGER.error("Error cargando config", e);
         }
+    }
+
+    public static void setConfigs() {
     }
 
     private void setup(final FMLCommonSetupEvent event) {

@@ -1,7 +1,7 @@
 package com.trolmastercard.sexmod.client.model.entity;
 
-import com.trolmastercard.sexmod.client.FakeWorld;
-import com.trolmastercard.sexmod.entity.AnimState;
+import com.trolmastercard.sexmod.client.model.BaseNpcModel;
+import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;
 import net.minecraft.resources.ResourceLocation;

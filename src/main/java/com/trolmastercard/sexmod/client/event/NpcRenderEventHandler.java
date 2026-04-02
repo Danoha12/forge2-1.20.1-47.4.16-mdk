@@ -2,7 +2,7 @@ package com.trolmastercard.sexmod.client.event;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.trolmastercard.sexmod.client.CameraController;
-import com.trolmastercard.sexmod.entity.AnimState;
+import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.NpcStateAccessor;
 import com.trolmastercard.sexmod.util.MathUtil;

@@ -10,5 +10,5 @@ public interface TickableCallback {
     /**
      * Método que se ejecuta una vez por cada tick del servidor/cliente (20 veces por segundo).
      */
-    void tick();
+    void onTick(); // ✅ CORREGIDO PARA EVITAR CHOQUES CON MINECRAFT
 }

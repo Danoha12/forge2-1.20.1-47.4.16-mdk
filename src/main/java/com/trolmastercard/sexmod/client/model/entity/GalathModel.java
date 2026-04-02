@@ -1,19 +1,20 @@
 package com.trolmastercard.sexmod.client.model.entity;
 
-import com.trolmastercard.sexmod.client.FakeWorld;
-import com.trolmastercard.sexmod.entity.AnimState;
+import com.trolmastercard.sexmod.entity.MangleLieEntity;
+import com.trolmastercard.sexmod.client.model.entity.MangleLieModel;
+import com.trolmastercard.sexmod.client.model.BaseNpcModel;
+import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.GalathEntity;
 import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;
-import com.trolmastercard.sexmod.item.FutaCommand;
+import com.trolmastercard.sexmod.command.FutaCommand;
 import com.trolmastercard.sexmod.util.MathUtil;
 import com.trolmastercard.sexmod.util.NpcPositionUtil;
 import com.trolmastercard.sexmod.util.RgbColor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
-import software.bernie.geckolib.animatable.model.CoreGeoBone;
-import software.bernie.geckolib.core.animation.AnimationProcessor;
+import software.bernie.geckolib.cache.object.GeoBone; // ✅ CORRECTOimport software.bernie.geckolib.core.animation.AnimationProcessor;
 import software.bernie.geckolib.core.animation.AnimationState;
 
 /**
@@ -42,7 +43,6 @@ public class GalathModel extends BaseNpcModel<BaseNpcEntity> {
     @Override
     public ResourceLocation getModelResource(BaseNpcEntity entity) {
         ResourceLocation[] geos = getGeoFiles();
-        if (entity.level() instanceof FakeWorld) return geos[0];
 
         // Si Galath tiene a su compañera MangleLie activa, usamos el modelo combinado
         if (entity instanceof GalathEntity galath && galath.getMangleLie(false) != null) {
@@ -85,7 +85,7 @@ public class GalathModel extends BaseNpcModel<BaseNpcEntity> {
 
         // 3. Pasar rotación de cabeza a la entidad para cálculos de sonido/partículas
         if (entity instanceof GalathEntity galath) {
-            CoreGeoBone head = getAnimationProcessor().getBone("head");
+            GeoBone head = getAnimationProcessor().getBone("head");
             if (head != null) {
                 galath.headRotX = head.getRotX();
             }
@@ -135,7 +135,7 @@ public class GalathModel extends BaseNpcModel<BaseNpcEntity> {
             return;
         }
 
-        CoreGeoBone rotTool = getAnimationProcessor().getBone("rotationTool");
+        GeoBone rotTool = getAnimationProcessor().getBone("rotationTool");
         if (rotTool == null) return;
 
         var yp = galath.getYawPitch();
@@ -160,7 +160,7 @@ public class GalathModel extends BaseNpcModel<BaseNpcEntity> {
         }
         if (frame < 24 || frame > 32) return;
 
-        CoreGeoBone body = getAnimationProcessor().getBone("body");
+        GeoBone body = getAnimationProcessor().getBone("body");
         if (body == null) return;
 
         float partial = Minecraft.getInstance().getPartialTick();
@@ -175,9 +175,9 @@ public class GalathModel extends BaseNpcModel<BaseNpcEntity> {
 
     private void updateClothingBones(BaseNpcEntity entity) {
         AnimationProcessor<BaseNpcEntity> proc = getAnimationProcessor();
-        CoreGeoBone nipR = proc.getBone("nippleR");
-        CoreGeoBone braL = proc.getBone("braBoobL");
-        CoreGeoBone slip = proc.getBone("slip");
+        GeoBone nipR = proc.getBone("nippleR");
+        GeoBone braL = proc.getBone("braBoobL");
+        GeoBone slip = proc.getBone("slip");
 
         boolean isNude = entity instanceof GalathEntity g && g.isNudeMode();
         boolean sexAction = AnimState.anyOf(entity.getAnimState(), AnimState.PUSSY_LICKING, AnimState.MASTERBATE_SITTING);
@@ -202,7 +202,7 @@ public class GalathModel extends BaseNpcModel<BaseNpcEntity> {
 
     private void updateBodySnapshot(BaseNpcEntity entity) {
         if (!(entity instanceof GalathEntity galath)) return;
-        CoreGeoBone body = getAnimationProcessor().getBone("body");
+        GeoBone body = getAnimationProcessor().getBone("body");
         if (body == null) return;
         galath.bodyRotY = body.getRotY();
         galath.bodyScaleY = body.getScaleY();
@@ -211,7 +211,7 @@ public class GalathModel extends BaseNpcModel<BaseNpcEntity> {
     private void updatePussyLickingIK(BaseNpcEntity entity) {
         if (entity.getAnimState() != AnimState.PUSSY_LICKING || !(entity instanceof GalathEntity galath)) return;
 
-        CoreGeoBone head = getAnimationProcessor().getBone("head");
+        GeoBone head = getAnimationProcessor().getBone("head");
         if (head == null) return;
 
         float tick = Minecraft.getInstance().getPartialTick() + entity.level().getGameTime();
@@ -226,7 +226,7 @@ public class GalathModel extends BaseNpcModel<BaseNpcEntity> {
     private void updateKnockOutFly(BaseNpcEntity entity) {
         if (!(entity instanceof GalathEntity galath) || galath.getAnimState() != AnimState.KNOCK_OUT_FLY) return;
 
-        CoreGeoBone body = getAnimationProcessor().getBone("body");
+        GeoBone body = getAnimationProcessor().getBone("body");
         if (body == null) return;
 
         Vec3 v = MangleLieModel.computeBodyVec(entity, Minecraft.getInstance().getPartialTick());
@@ -236,7 +236,7 @@ public class GalathModel extends BaseNpcModel<BaseNpcEntity> {
 
     private void updateTransitionBones(BaseNpcEntity entity) {
         if (entity.getAnimState() == AnimState.HUG_MANG) {
-            CoreGeoBone body2 = getAnimationProcessor().getBone("body2");
+            GeoBone body2 = getAnimationProcessor().getBone("body2");
             if (body2 != null) {
                 body2.updatePosition(0.0F, -0.53F, -40.05F);
             }
@@ -250,7 +250,7 @@ public class GalathModel extends BaseNpcModel<BaseNpcEntity> {
     }
 
     private void setBoneHidden(String name, boolean hidden) {
-        CoreGeoBone bone = getAnimationProcessor().getBone(name);
+        GeoBone bone = getAnimationProcessor().getBone(name);
         if (bone != null) bone.setHidden(hidden);
     }
 

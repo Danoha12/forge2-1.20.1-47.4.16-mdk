@@ -1,6 +1,6 @@
 package com.trolmastercard.sexmod.client;
 
-import com.trolmastercard.sexmod.entity.ClothingSlot;
+import com.trolmastercard.sexmod.registry.ClothingSlot;
 import com.trolmastercard.sexmod.entity.LightingMode;
 import com.trolmastercard.sexmod.entity.NpcType;
 import com.trolmastercard.sexmod.network.ModNetwork;
@@ -22,6 +22,7 @@ import net.minecraftforge.server.ServerLifecycleHooks;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import software.bernie.geckolib.cache.GeckoLibCache;
+import software.bernie.geckolib.loading.json.typeadapter.KeyFramesAdapter;
 import software.bernie.geckolib.loading.object.BakedModelFactory;
 
 import javax.imageio.ImageIO;
@@ -107,8 +108,8 @@ public class CustomModelManager {
                 String json = readFile(geoFile);
                 entry.geoResourceLocation = new ResourceLocation(ModConstants.MOD_ID, name.toLowerCase() + "_model");
 
-                var bakedModel = BakedModelFactory.getDefault()
-                        .constructGeoModel(software.bernie.geckolib.loading.json.typeadapter.KeyFramesAdapter.GEO_GSON
+                var bakedModel = BakedModelFactory.getForNamespace()
+                        .constructGeoModel(KeyFramesAdapter.GEO_GSON
                                 .fromJson(json, software.bernie.geckolib.loading.json.raw.GeometryModelData.class));
 
                 GeckoLibCache.getBakedModels().put(entry.geoResourceLocation, bakedModel);

@@ -4,7 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.trolmastercard.sexmod.client.ClothRenderUtil;
 import com.trolmastercard.sexmod.client.model.entity.MangleLieModel;
-import com.trolmastercard.sexmod.entity.AnimState;
+import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.GalathEntity;
 import com.trolmastercard.sexmod.entity.MangleLieEntity;
 import com.trolmastercard.sexmod.registry.NpcBoneRegistry;

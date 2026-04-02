@@ -3,7 +3,7 @@ package com.trolmastercard.sexmod.item;
 import com.trolmastercard.sexmod.entity.KoboldEntity;
 import com.trolmastercard.sexmod.network.ModNetwork;
 import com.trolmastercard.sexmod.network.packet.TribeUIValuesPacket;
-import com.trolmastercard.sexmod.client.screen.StaffCommandScreen;
+import com.trolmastercard.sexmod.client.gui.StaffCommandScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;

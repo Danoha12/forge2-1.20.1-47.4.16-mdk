@@ -1,6 +1,7 @@
 package com.trolmastercard.sexmod.client.renderer.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.trolmastercard.sexmod.client.renderer.ColoredNpcHandRenderer;
 import com.trolmastercard.sexmod.entity.KoboldEntity;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.registry.AnimState;

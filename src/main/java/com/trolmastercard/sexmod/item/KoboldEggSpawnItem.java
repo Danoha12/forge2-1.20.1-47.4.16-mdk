@@ -2,7 +2,7 @@ package com.trolmastercard.sexmod.item;
 
 import com.trolmastercard.sexmod.client.renderer.item.KoboldEggItemRenderer;
 import com.trolmastercard.sexmod.entity.KoboldEgg;
-import com.trolmastercard.sexmod.entity.EyeAndKoboldColor;
+import com.trolmastercard.sexmod.util.EyeAndKoboldColor;
 import com.trolmastercard.sexmod.registry.ModEntities;
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.nbt.CompoundTag;

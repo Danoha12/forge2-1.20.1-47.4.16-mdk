@@ -1,9 +1,8 @@
 package com.trolmastercard.sexmod.entity;
 
-import com.trolmastercard.sexmod.client.FakeWorld;
 import com.trolmastercard.sexmod.client.gui.HornyMeterOverlay;
 import com.trolmastercard.sexmod.client.handler.ClientStateManager;
-import com.trolmastercard.sexmod.client.shader.OutlineShaderManager;
+import com.trolmastercard.sexmod.client.renderer.OutlineShaderManager;
 import com.trolmastercard.sexmod.network.ModNetwork;
 import com.trolmastercard.sexmod.network.packet.CameraControlPacket;
 import com.trolmastercard.sexmod.registry.AnimState;

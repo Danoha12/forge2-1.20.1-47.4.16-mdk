@@ -2,7 +2,8 @@ package com.trolmastercard.sexmod.client.renderer.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.trolmastercard.sexmod.entity.AnimState;
+import com.trolmastercard.sexmod.client.renderer.BaseNpcRenderer;
+import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;

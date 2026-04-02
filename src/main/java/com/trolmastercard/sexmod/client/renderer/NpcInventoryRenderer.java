@@ -2,6 +2,8 @@ package com.trolmastercard.sexmod.client.renderer; // Ajusta al paquete de tus r
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.trolmastercard.sexmod.entity.NpcInventoryEntity;
+import com.trolmastercard.sexmod.registry.AnimState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;

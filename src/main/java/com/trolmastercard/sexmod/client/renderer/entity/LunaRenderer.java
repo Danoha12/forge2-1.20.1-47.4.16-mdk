@@ -1,6 +1,7 @@
 package com.trolmastercard.sexmod.client.renderer.entity;
 
 import com.trolmastercard.sexmod.client.model.entity.LunaModel;
+import com.trolmastercard.sexmod.client.renderer.BaseNpcRenderer;
 import com.trolmastercard.sexmod.entity.LunaEntity;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 

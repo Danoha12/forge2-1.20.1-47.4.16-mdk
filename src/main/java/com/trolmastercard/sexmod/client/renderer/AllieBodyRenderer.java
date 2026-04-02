@@ -2,6 +2,7 @@ package com.trolmastercard.sexmod.client.renderer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.trolmastercard.sexmod.client.renderer.entity.NpcArmRenderer;
 import com.trolmastercard.sexmod.entity.AllieEntity;
 import com.trolmastercard.sexmod.registry.AnimState;
 import net.minecraft.util.Mth;

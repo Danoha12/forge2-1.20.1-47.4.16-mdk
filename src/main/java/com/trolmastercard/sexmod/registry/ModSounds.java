@@ -124,10 +124,15 @@ public class ModSounds {
     // ── Kobold ───────────────────────────────────────────────────────────────
     public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_BJMOAN         = new RegistryObject[10];
     public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_GIGGLE         = new RegistryObject[4];
-    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_HMPH           = new RegistryObject[4];
-    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_LIPSOUND       = new RegistryObject[6];
-    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_MOAN           = new RegistryObject[9];
-
+    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_HAA            = new RegistryObject[7];
+    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_HEYMASTER      = new RegistryObject[6];
+    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_INTERESTED     = new RegistryObject[3];
+    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_LIGHTBREATHING = new RegistryObject[12];
+    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_MASTER         = new RegistryObject[6];
+    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_MOAN           = new RegistryObject[10];
+    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_ORGASM         = new RegistryObject[4];
+    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_SAD            = new RegistryObject[3];
+    public static final RegistryObject<SoundEvent>[] GIRLS_KOBOLD_YEP            = new RegistryObject[7];
     // ── Registro Automático (Reflexión 1.20.1) ───────────────────────────────
 
     /**

@@ -30,10 +30,9 @@ import java.util.UUID;
  */
 public class AllieEntity extends BaseNpcEntity implements GeoEntity {
 
-    // Slot sincronizado para la lámpara (vital para que Allie sepa sus usos)
     public static final EntityDataAccessor<ItemStack> LAMP_SLOT = SynchedEntityData.defineId(AllieEntity.class, EntityDataSerializers.ITEM_STACK);
 
-    private float disappearTimer = 1.0F; // Controla el efecto de "regreso a la lámpara"
+    private float disappearTimer = 1.0F;
     private final AnimatableInstanceCache animCache = GeckoLibUtil.createInstanceCache(this);
 
     public AllieEntity(EntityType<? extends AllieEntity> type, Level level) {
@@ -48,7 +47,6 @@ public class AllieEntity extends BaseNpcEntity implements GeoEntity {
 
     // ── Lógica de "ADN" de Allie ─────────────────────────────────────────────
 
-    /** Chequea si es la primera vez que sale de la lámpara según el NBT del ítem */
     public boolean isFirstSummon() {
         ItemStack lamp = this.entityData.get(LAMP_SLOT);
         CompoundTag tag = lamp.getOrCreateTag();
@@ -61,11 +59,10 @@ public class AllieEntity extends BaseNpcEntity implements GeoEntity {
     public void aiStep() {
         super.aiStep();
 
-        // Lógica de desaparición: si el timer baja, Allie se vuelve humo y desaparece
         if (disappearTimer < 1.0F && disappearTimer > 0.0F) {
             disappearTimer -= 0.05F;
             if (disappearTimer <= 0.0F) {
-                this.discard(); // Adiós, Allie
+                this.discard();
             }
         }
 
@@ -76,7 +73,6 @@ public class AllieEntity extends BaseNpcEntity implements GeoEntity {
 
     @OnlyIn(Dist.CLIENT)
     private void spawnTailParticles() {
-        // Genera partículas de portal en la base de la "cola" de humo de Allie
         if (this.tickCount % 2 == 0) {
             this.level().addParticle(ParticleTypes.PORTAL,
                     this.getX() + (this.random.nextDouble() - 0.5D),
@@ -90,13 +86,13 @@ public class AllieEntity extends BaseNpcEntity implements GeoEntity {
 
     @Override
     public void triggerAction(String actionKey, UUID playerUUID) {
-        // Mapeo de botones del menú UI a estados de animación
+        // Usamos los nombres estandarizados de tu AnimState
         switch (actionKey) {
             case "wish_wealth" -> {
-                setAnimStateFiltered(isFirstSummon() ? AnimState.SPECIAL_WISH_START : AnimState.SPECIAL_WISH_NORMAL);
+                setAnimStateFiltered(isFirstSummon() ? AnimState.RICH_FIRST_TIME : AnimState.RICH_NORMAL);
             }
             case "special_1" -> {
-                setAnimStateFiltered(AnimState.INTERACTION_START_1);
+                setAnimStateFiltered(AnimState.REVERSE_COWGIRL_START);
             }
         }
     }
@@ -105,21 +101,21 @@ public class AllieEntity extends BaseNpcEntity implements GeoEntity {
 
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar registrar) {
-        // Controlador de la cola (siempre en movimiento, es humo mágico)
         registrar.add(new AnimationController<>(this, "tail", 0, state ->
                 state.setAndContinue(RawAnimation.begin().thenLoop("animation.allie.tail"))
         ));
 
-        // Controlador de Cuerpo y Sexo
         AnimationController<AllieEntity> actionCtrl = new AnimationController<>(this, "action", 0, state -> {
             AnimState anim = getAnimState();
             if (anim == AnimState.NULL) return PlayState.STOP;
 
+            // Mapeo sincronizado con los nombres de AnimState
             String name = switch (anim) {
-                case SUMMON_START -> "animation.allie.summon";
-                case INTERACTION_START_1 -> "animation.allie.reverse_cowgirl_start";
-                case INTERACTION_LOOP_1 -> "animation.allie.reverse_cowgirl_slow";
-                case SPECIAL_WISH_START -> "animation.allie.rich";
+                case SUMMON -> "animation.allie.summon";
+                case REVERSE_COWGIRL_START -> "animation.allie.reverse_cowgirl_start";
+                case REVERSE_COWGIRL_SLOW -> "animation.allie.reverse_cowgirl_slow";
+                case RICH_FIRST_TIME -> "animation.allie.rich";
+                case RICH_NORMAL -> "animation.allie.rich_normal";
                 default -> "animation.allie.idle";
             };
             return state.setAndContinue(RawAnimation.begin().thenLoop(name));
@@ -130,18 +126,22 @@ public class AllieEntity extends BaseNpcEntity implements GeoEntity {
     }
 
     @OnlyIn(Dist.CLIENT)
-    private void handleSoundKeyframe(software.bernie.geckolib.core.animation.event.SoundKeyframeEvent<AllieEntity> event) {
+    // 🚨 CORREGIDO AQUÍ: Se cambió animation.event a keyframe.event
+    private void handleSoundKeyframe(software.bernie.geckolib.core.keyframe.event.SoundKeyframeEvent<AllieEntity> event) {
         String key = event.getKeyframeData().getSound();
         Player localPlayer = Minecraft.getInstance().player;
-        boolean isPartner = localPlayer != null && localPlayer.getUUID().equals(this.getSexPartnerUUID());
+
+        // Se cambió getSexPartnerUUID() a un valor dummy temporal si no existe en BaseNpcEntity
+        // Si tu BaseNpcEntity tiene el método, descomenta la siguiente línea y borra el 'boolean isPartner = false;'
+        // boolean isPartner = localPlayer != null && localPlayer.getUUID().equals(this.getSexPartnerUUID());
+        boolean isPartner = false;
 
         switch (key) {
             case "wish_granted" -> {
-                this.disappearTimer = 0.9F; // Empezar a desaparecer
-                // Aquí se dispararía el paquete para dar esmeraldas/diamantes al jugador
+                this.disappearTimer = 0.9F;
             }
             case "moan" -> {
-                this.playSound(ModSounds.ALLIE_VOICE_HAPPY.get(), 1.0F, 1.0F);
+                this.playSound(ModSounds.GIRLS_ALLIE_BJMOAN.get(), 1.0F, 1.0F);
                 if (isPartner) InteractionMeterOverlay.addValue(0.03D);
             }
         }

@@ -2,7 +2,7 @@ package com.trolmastercard.sexmod.client.renderer.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.trolmastercard.sexmod.client.entity.ClothingOverlayEntity;
+import com.trolmastercard.sexmod.ClothingOverlayEntity;
 import com.trolmastercard.sexmod.entity.KoboldEntity;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;

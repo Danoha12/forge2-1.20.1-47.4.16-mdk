@@ -3,7 +3,7 @@ package com.trolmastercard.sexmod.client.handler;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;
 import com.trolmastercard.sexmod.util.ModConstants;
-import com.trolmastercard.sexmod.client.SexAnimationTracker; // Asumiendo esta ruta
+import com.trolmastercard.sexmod.util.SexAnimationTracker; // Asumiendo esta ruta
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;

@@ -2,6 +2,7 @@ package com.trolmastercard.sexmod.client.renderer.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.trolmastercard.sexmod.client.renderer.BaseNpcRenderer;
 import com.trolmastercard.sexmod.entity.NpcInventoryEntity;
 import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.util.BoneMatrixUtil;
@@ -44,7 +45,7 @@ public class JennyNpcRenderer extends BaseNpcRenderer<NpcInventoryEntity> {
 
         AnimState state = entity.getAnimState();
         // SFW: Mapeo de estados de interacción especial
-        if (state == AnimState.SPECIAL_INTERACTION_A || state == AnimState.SPECIAL_INTERACTION_A_START) {
+        if (state == AnimState.SUCKBLOWJOB  || state == AnimState.STARTBLOWJOB) {
             ItemStack weapon = entity.getWeaponSlotItem();
             ItemStack synced = entity.getEntityData().get(NpcInventoryEntity.SYNCED_ITEM);
 

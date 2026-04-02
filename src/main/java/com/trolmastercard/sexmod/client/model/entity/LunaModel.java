@@ -1,5 +1,6 @@
 package com.trolmastercard.sexmod.client.model.entity;
 
+import com.trolmastercard.sexmod.client.model.BaseNpcModel;
 import com.trolmastercard.sexmod.entity.LunaEntity;
 import com.trolmastercard.sexmod.util.ModConstants;
 import net.minecraft.resources.ResourceLocation;

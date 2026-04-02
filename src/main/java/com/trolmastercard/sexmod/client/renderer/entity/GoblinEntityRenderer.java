@@ -2,10 +2,9 @@ package com.trolmastercard.sexmod.client.renderer.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.trolmastercard.sexmod.client.FakeWorld;
 import com.trolmastercard.sexmod.client.handler.KoboldShoulderRenderHandler;
 import com.trolmastercard.sexmod.client.model.entity.GoblinModel;
-import com.trolmastercard.sexmod.entity.AnimState;
+import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.GoblinEntity;
 import com.trolmastercard.sexmod.entity.NpcModelCodeEntity;
