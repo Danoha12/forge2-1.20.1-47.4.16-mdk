@@ -1,5 +1,6 @@
 package com.trolmastercard.sexmod;
 
+import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;

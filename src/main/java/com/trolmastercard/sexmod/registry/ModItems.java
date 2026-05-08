@@ -1,5 +1,6 @@
 package com.trolmastercard.sexmod.registry;
 
+import com.trolmastercard.sexmod.HornyPotion;
 import com.trolmastercard.sexmod.block.SexmodFireBlock;
 import com.trolmastercard.sexmod.item.*;
 import com.trolmastercard.sexmod.util.ModConstants;
@@ -55,6 +56,8 @@ public final class ModItems {
     public static final RegistryObject<Item> GALATH_WAND = ITEMS.register("galath_wand",
             GalathWandItem::new);
 
+    public static final RegistryObject<Item> KOBOLD_TREAT = ITEMS.register("kobold_treat",
+            () -> new Item(new Item.Properties()));
     // ── Método de Inicialización ─────────────────────────────────────────────
 
     /**

@@ -83,4 +83,17 @@ public class OutlineShaderManager implements ResourceManagerReloadListener {
     public static boolean isAvailable() {
         return postChain != null;
     }
+// ── CONTROL DE PANTALLA NEGRA ─────────────────────────────────────────
+
+    // Esta variable te servirá más adelante para decirle a tu GUI que dibuje el color negro
+    public static boolean showBlackScreen = false;
+
+    /**
+     * Activa el efecto de pantalla negra temporal durante las animaciones.
+     */
+    public static void doBlackScreen() {
+        // Activamos la bandera.
+        // Ya con esto el compilador te deja pasar la camioneta sin problemas.
+        showBlackScreen = true;
+    }
 }

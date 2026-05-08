@@ -38,7 +38,10 @@ public abstract class NpcInventoryEntity extends BaseNpcEntity {
     public static final EntityDataAccessor<ItemStack> SLOT_LEGS      = SynchedEntityData.defineId(NpcInventoryEntity.class, EntityDataSerializers.ITEM_STACK);
     public static final EntityDataAccessor<ItemStack> SLOT_FEET      = SynchedEntityData.defineId(NpcInventoryEntity.class, EntityDataSerializers.ITEM_STACK);
     public static final EntityDataAccessor<Integer>   MOOD_STATE     = SynchedEntityData.defineId(NpcInventoryEntity.class, EntityDataSerializers.INT);
-
+    public static final EntityDataAccessor<ItemStack> HELMET_ITEM = SynchedEntityData.defineId(NpcInventoryEntity.class, EntityDataSerializers.ITEM_STACK);
+    public static final EntityDataAccessor<ItemStack> CHEST_ITEM = SynchedEntityData.defineId(NpcInventoryEntity.class, EntityDataSerializers.ITEM_STACK);
+    public static final EntityDataAccessor<ItemStack> LEG_ITEM = SynchedEntityData.defineId(NpcInventoryEntity.class, EntityDataSerializers.ITEM_STACK);
+    public static final EntityDataAccessor<ItemStack> FEET_ITEM = SynchedEntityData.defineId(NpcInventoryEntity.class, EntityDataSerializers.ITEM_STACK);
     // ── Alias de Compatibilidad (1.12.2 Legacy) ───────────────────────────────
     // Estos nombres permiten que tus clases de renderizado antiguas sigan compilando
     public static final EntityDataAccessor<ItemStack> SLOT_BOW   = SLOT_MAIN_HAND; // L
@@ -74,6 +77,10 @@ public abstract class NpcInventoryEntity extends BaseNpcEntity {
         this.entityData.define(SLOT_LEGS,      ItemStack.EMPTY);
         this.entityData.define(SLOT_FEET,      ItemStack.EMPTY);
         this.entityData.define(MOOD_STATE,     0);
+        this.entityData.define(HELMET_ITEM, ItemStack.EMPTY);
+        this.entityData.define(CHEST_ITEM, ItemStack.EMPTY);
+        this.entityData.define(LEG_ITEM, ItemStack.EMPTY);
+        this.entityData.define(FEET_ITEM, ItemStack.EMPTY);
     }
 
     private void syncInventoryToData(int slot) {

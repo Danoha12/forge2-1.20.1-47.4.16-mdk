@@ -49,24 +49,37 @@ public class GoblinBodyRenderer extends NpcBodyRenderer<GoblinEntity> {
     // ── Sobrescritura de Textura de Piel ──────────────────────────────────────
 
     @Nullable
-    @Override
     protected NpcSkinTexture getSkinTexture(GoblinEntity entity) {
         try {
-            // Asumiendo que FakeWorld fue reemplazado o manejado en 1.20.1
-            // if (entity.level() instanceof FakeWorld) return null;
-            if (entity.getCarrierUUID() != null) return null; // isCarried
-        } catch (RuntimeException ignored) {}
+            // 1. Si no hay nivel, es que estamos en un menú (el reemplazo de FakeWorld)
+            if (entity.level() == null) return NpcColorData.DEFAULT_TEXTURE;
 
-        return NpcColorData.DEFAULT_TEXTURE;
-    }
+            // 2. Si la están cargando en el hombro, a veces conviene no procesar skin
+            if (entity.getCarrierUUID() != null) return null;
 
-    // ── Huesos Ocultos Base ───────────────────────────────────────────────────
+            // 3. ¡LA MAGIA! Intentamos sacar el UUID del dueño o de quien la spawneó
+            java.util.UUID skinUUID = entity.getOwnerUUID();
 
-    @Override
-    protected HashSet<String> getHiddenBones() {
-        HashSet<String> set = new HashSet<>(NpcColorData.getHiddenBones());
-        set.addAll(ClothingOverlayBones.ALL);
-        return set;
+            // Si no hay dueño, usamos el del jugador local como prueba
+            if (skinUUID == null && Minecraft.getInstance().player != null) {
+                skinUUID = Minecraft.getInstance().player.getGameProfile().getId();
+            }
+
+            // 4. Si de plano no hay UUID, ahí sí mandamos la default
+            if (skinUUID == null) return NpcColorData.DEFAULT_TEXTURE;
+
+            // 5. Buscamos en el archivero (Caché) que creamos hace rato
+            NpcSkinTexture cached = NpcSkinTexture.getCache().get(skinUUID);
+            if (cached != null) return cached;
+
+            // 6. Si no estaba en el archivero, la mandamos a fabricar
+            return NpcColorData.loadSkinTexture(skinUUID, entity.level());
+
+        } catch (Exception e) {
+            // Si algo truena (como que no haya internet para bajar la skin),
+            // devolvemos la default para que no crashee el juego
+            return NpcColorData.DEFAULT_TEXTURE;
+        }
     }
 
     // ── Render Principal (Lógica Shoulder-Ride) ───────────────────────────────
@@ -83,7 +96,7 @@ public class GoblinBodyRenderer extends NpcBodyRenderer<GoblinEntity> {
         if (mc.options.getCameraType().isFirstPerson() && mc.player != null) {
             try {
                 var localUUID = mc.player.getGameProfile().getId();
-                if (entity instanceof PlayerKoboldEntity pk && localUUID.equals(pk.getOwnerUUID())) {
+                if (localUUID.equals(entity.getOwnerUUID())) {
                     if (!entity.isSexModeActive()) return;
                 }
             } catch (RuntimeException ignored) {}
@@ -102,10 +115,13 @@ public class GoblinBodyRenderer extends NpcBodyRenderer<GoblinEntity> {
 
         String name = bone.getName();
 
-        // 1. Ocultar huesos de físicas si está siendo cargado
-        if (entity.getCarrierUUID() != null && PHYSICS_ONLY_BONES.contains(name)) {
-            return;
-        }
+        // Ocultamiento base
+        if (NpcColorData.getHiddenBones().contains(name) || ClothingOverlayBones.ALL.contains(name)) return;
+        if (entity.getCarrierUUID() != null && PHYSICS_ONLY_BONES.contains(name)) return;
+
+        // 🚨 CONFIGURACIÓN DEL ADAPTADOR
+        float uvOffset = 0.0F;
+        VertexConsumer activeConsumer = vc; // Por defecto usamos el normal
 
         // 2. Aplicar tinte y UV Offset a huesos de armadura
         if (TINTABLE_BONES.contains(name)) {
@@ -114,26 +130,32 @@ public class GoblinBodyRenderer extends NpcBodyRenderer<GoblinEntity> {
                 r = tint[0];
                 g = tint[1];
                 b = tint[2];
-                // tint[3] es el UV offset, tu NpcBodyRenderer debe procesarlo
+                uvOffset = tint[3]; // 👈 ¡Ahora sí guardamos el offset!
+
+                // Si el offset no es cero, activamos el "Adaptador"
+                if (uvOffset != 0.0F) {
+                    activeConsumer = new UVOffsetVertexConsumer(vc, 0, uvOffset);
+                }
             }
         }
 
-        super.renderRecursively(ps, entity, bone, renderType, buf, vc,
+        // 🚨 REPARADO: Pasamos el 'activeConsumer' en lugar del 'vc' original
+        super.renderRecursively(ps, entity, bone, renderType, buf, activeConsumer,
                 isReRender, partialTick, light, overlay, r, g, b, a);
     }
 
     // ── Cálculo del Tinte de Armadura ─────────────────────────────────────────
 
+    // ── Cálculo del Tinte de Armadura (Versión Corregida) ─────────────────────
+
     @Nullable
     private float[] computeBoneTint(GoblinEntity entity, String boneName, float r, float g, float b) {
-        if ("armorHelmet".equals(boneName)) {
-            return super.computeDefaultTint(boneName, r, g, b);
-        }
-
         ItemStack stack = ItemStack.EMPTY;
 
-        // Mapear el hueso al slot de inventario correspondiente
+        // 1. Mapeamos el hueso al slot de inventario (🚨 Agregamos el Casco aquí)
         switch (boneName) {
+            case "armorHelmet" ->
+                    stack = entity.getEntityData().get(NpcInventoryEntity.HELMET_ITEM);
             case "braBoobL", "braBoobR", "armorNippleR", "armorNippleL" ->
                     stack = entity.getEntityData().get(NpcInventoryEntity.CHEST_ITEM);
             case "turnable", "static", "slip" ->
@@ -142,11 +164,12 @@ public class GoblinBodyRenderer extends NpcBodyRenderer<GoblinEntity> {
                     stack = entity.getEntityData().get(NpcInventoryEntity.FEET_ITEM);
         }
 
-        if (!(stack.getItem() instanceof ArmorItem armor)) {
+        // 2. Si no es un hueso de armadura o el slot está vacío, color normal sin offset
+        if (stack.isEmpty() || !(stack.getItem() instanceof ArmorItem armor)) {
             return new float[]{r, g, b, 0.0F};
         }
 
-        // Armadura de Cuero (Tintable)
+        // 3. Armadura de Cuero (Tintable)
         if (armor instanceof DyeableArmorItem dyeable) {
             int color = dyeable.getColor(stack);
             float cr = ((color >> 16) & 0xFF) / 255.0F;
@@ -155,8 +178,8 @@ public class GoblinBodyRenderer extends NpcBodyRenderer<GoblinEntity> {
             return new float[]{r * cr, g * cg, b * cb, -0.09375F};
         }
 
-        // Offset UV para otros materiales de Vanilla
-        float uvOffset = -0.1875F; // Default
+        // 4. Offset UV para otros materiales (Hierro, Oro, Diamante...)
+        float uvOffset = -0.1875F; // Default (Cota de malla / Otros)
 
         if (armor.getMaterial() == ArmorMaterials.IRON) {
             uvOffset = -0.15625F;
@@ -167,5 +190,30 @@ public class GoblinBodyRenderer extends NpcBodyRenderer<GoblinEntity> {
         }
 
         return new float[]{r, g, b, uvOffset};
+    }
+// ── Clase Ayudante para mover las UVs (Texturas) ─────────────────────────
+
+    private record UVOffsetVertexConsumer(VertexConsumer delegate, float uOffset, float vOffset) implements VertexConsumer {
+        @Override
+        public VertexConsumer vertex(double x, double y, double z) { return delegate.vertex(x, y, z); }
+        @Override
+        public VertexConsumer color(int r, int g, int b, int a) { return delegate.color(r, g, b, a); }
+        @Override
+        public VertexConsumer uv(float u, float v) {
+            // 🚨 AQUÍ SUCEDE LA MAGIA: Sumamos el desplazamiento a la textura
+            return delegate.uv(u + uOffset, v + vOffset);
+        }
+        @Override
+        public VertexConsumer overlayCoords(int u, int v) { return delegate.overlayCoords(u, v); }
+        @Override
+        public VertexConsumer uv2(int u, int v) { return delegate.uv2(u, v); }
+        @Override
+        public VertexConsumer normal(float x, float y, float z) { return delegate.normal(x, y, z); }
+        @Override
+        public void endVertex() { delegate.endVertex(); }
+        @Override
+        public void defaultColor(int r, int g, int b, int a) { delegate.defaultColor(r, g, b, a); }
+        @Override
+        public void unsetDefaultColor() { delegate.unsetDefaultColor(); }
     }
 }

@@ -5,7 +5,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.trolmastercard.sexmod.client.model.item.GalathCoinModel;
 import com.trolmastercard.sexmod.item.GalathCoinItem;
 import com.trolmastercard.sexmod.util.MathUtil;
-import com.trolmastercard.sexmod.util.RgbColor;
+import com.trolmastercard.sexmod.util.RgbaColor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -27,8 +27,8 @@ public class GalathCoinRenderer extends GeoItemRenderer<GalathCoinItem> {
 
   // ── Constantes de Color y Luz ─────────────────────────────────────────────
 
-  public static final RgbColor COLOR_ACTIVE = new RgbColor(0.847F, 0.117F, 0.356F); // Hot Pink
-  public static final RgbColor COLOR_INACTIVE = new RgbColor(0.447F, 0.447F, 0.447F); // Grey
+  public static final RgbaColor COLOR_ACTIVE = new RgbaColor(0.847F, 0.117F, 0.356F); // Hot Pink
+  public static final RgbaColor COLOR_INACTIVE = new RgbaColor(0.447F, 0.447F, 0.447F); // Grey
 
   public static final int LIGHT_FULL = 240; // Brillo máximo
   public static final int LIGHT_HALF = 120; // Brillo tenue
@@ -39,7 +39,7 @@ public class GalathCoinRenderer extends GeoItemRenderer<GalathCoinItem> {
   // ── Estado por Frame ──────────────────────────────────────────────────────
 
   private boolean isRenderingPentagram = false;
-  private RgbColor currentPentagramColor = COLOR_INACTIVE;
+  private RgbaColor currentPentagramColor = COLOR_INACTIVE;
 
   public GalathCoinRenderer() {
     super(new GalathCoinModel());
@@ -103,7 +103,7 @@ public class GalathCoinRenderer extends GeoItemRenderer<GalathCoinItem> {
     return idleLightSine(partialTick);
   }
 
-  private RgbColor resolvePentagramColor() {
+  private RgbaColor resolvePentagramColor() {
     if (!isHeldByLocalPlayer()) return COLOR_ACTIVE;
 
     long now = System.currentTimeMillis();
@@ -143,19 +143,19 @@ public class GalathCoinRenderer extends GeoItemRenderer<GalathCoinItem> {
     return (int) (60.0 * Math.sin((mc.player.tickCount + partialTick) * 0.05F) + 180.0);
   }
 
-  private RgbColor colorActivate(long activatedAt, long now) {
+  private RgbaColor colorActivate(long activatedAt, long now) {
     float elapsed = (float) (now - activatedAt);
     if (elapsed < TRANSITION_START_MS) return COLOR_INACTIVE;
     if (elapsed <= TRANSITION_END_MS)
-      return RgbColor.lerp(COLOR_INACTIVE, COLOR_ACTIVE, (elapsed - TRANSITION_START_MS) / (TRANSITION_END_MS - TRANSITION_START_MS));
+      return RgbaColor.lerp(COLOR_INACTIVE, COLOR_ACTIVE, (elapsed - TRANSITION_START_MS) / (TRANSITION_END_MS - TRANSITION_START_MS));
     return COLOR_ACTIVE;
   }
 
-  private RgbColor colorDeactivate(long deactivatedAt, long now) {
+  private RgbaColor colorDeactivate(long deactivatedAt, long now) {
     float elapsed = (float) (now - deactivatedAt);
     if (elapsed < TRANSITION_START_MS) return COLOR_ACTIVE;
     if (elapsed <= TRANSITION_END_MS)
-      return RgbColor.lerp(COLOR_ACTIVE, COLOR_INACTIVE, (elapsed - TRANSITION_START_MS) / (TRANSITION_END_MS - TRANSITION_START_MS));
+      return RgbaColor.lerp(COLOR_ACTIVE, COLOR_INACTIVE, (elapsed - TRANSITION_START_MS) / (TRANSITION_END_MS - TRANSITION_START_MS));
     return COLOR_INACTIVE;
   }
 

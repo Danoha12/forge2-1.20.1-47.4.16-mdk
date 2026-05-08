@@ -1,6 +1,6 @@
 package com.trolmastercard.sexmod.entity.ai;
 
-import com.trolmastercard.sexmod.entity.AnimState;
+import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.EnergyBallEntity;
 import com.trolmastercard.sexmod.entity.GalathEntity;

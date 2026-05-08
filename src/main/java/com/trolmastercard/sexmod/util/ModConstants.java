@@ -18,7 +18,8 @@ public final class ModConstants {
   public static final String MOD_ID      = "sexmod";
   public static final String MOD_NAME    = "Fapcraft";
   public static final String MOD_VERSION = "1.1.0";
-
+  public static net.minecraft.world.phys.Vec3 PLAYER_POS = net.minecraft.world.phys.Vec3.ZERO;
+  public static net.minecraft.world.phys.Vec3 PREV_PLAYER_POS = net.minecraft.world.phys.Vec3.ZERO;
   // ── Proxies (Deprecados) ────────────────────────────────────────────────
 
   // Nota: En 1.20.1 usamos @EventBusSubscriber en lugar de estas rutas.
@@ -53,4 +54,6 @@ public final class ModConstants {
   public static boolean isClient() {
     return FMLLoader.getDist().isClient();
   }
+  // Contador global para IDs de botones (Legacy)
+  public static int BUTTON_ID_COUNTER = 0;
 }

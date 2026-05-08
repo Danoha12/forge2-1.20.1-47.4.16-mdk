@@ -29,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * GalathOwnershipData — Portado a 1.20.1.
  * * Maneja el vínculo 1:1 entre un jugador y su chica principal.
+ * * Sincronizado con la moneda (GalathCoinItem).
  */
 @Mod.EventBusSubscriber(modid = ModConstants.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class GalathOwnershipData extends SavedData {
@@ -41,11 +42,19 @@ public class GalathOwnershipData extends SavedData {
     private static final Map<UUID, Long> lastDosageTime = new ConcurrentHashMap<>();
     private static final Set<UUID> mangoOwners = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
+    /** 🚨 CAMBIO: Variable para que el cliente sepa si tiene a Galath (Usado por la moneda) */
+    public static boolean clientHasGalath = false;
+
     // ── API de Propiedad (Ownership) ─────────────────────────────────────────
 
     public static void setOwnership(Player player, BaseNpcEntity npc) {
         ownershipMap.put(player.getUUID(), npc.getUUID());
         markDirtyStatic();
+
+        // 🚨 CAMBIO: Notificamos al cliente que ahora tiene dueña
+        if (player instanceof ServerPlayer sp) {
+            ModNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> sp), new OwnershipSyncPacket(true));
+        }
     }
 
     public static void removeOwnership(BaseNpcEntity npc) {
@@ -55,11 +64,17 @@ public class GalathOwnershipData extends SavedData {
 
             ServerPlayer sp = ServerLifecycleHooks.getCurrentServer().getPlayerList().getPlayer(playerUUID);
             if (sp != null) {
+                // Notificamos al cliente que ya no tiene dueña
                 ModNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> sp), new OwnershipSyncPacket(false));
             }
         }
         npc.remove(Entity.RemovalReason.DISCARDED);
         markDirtyStatic();
+    }
+
+    /** 🚨 CAMBIO: Método puente para la GalathCoinItem */
+    public static boolean hasGalath(UUID playerUUID) {
+        return hasNpc(playerUUID);
     }
 
     public static boolean hasNpc(UUID playerUUID) {
@@ -69,6 +84,12 @@ public class GalathOwnershipData extends SavedData {
     @Nullable
     public static UUID getNpcForPlayer(UUID playerUUID) {
         return ownershipMap.getByKey(playerUUID);
+    }
+
+    /** 🚨 CAMBIO: Método puente para obtener el UUID desde el objeto Player */
+    @Nullable
+    public static UUID getGalathUUID(Player player) {
+        return getNpcForPlayer(player.getUUID());
     }
 
     @Nullable
@@ -107,7 +128,6 @@ public class GalathOwnershipData extends SavedData {
         lastDosageTime.clear();
         mangoOwners.clear();
 
-        // Forma moderna de leer listas de diccionarios en 1.20.1
         if (tag.contains("OwnershipList", Tag.TAG_LIST)) {
             ListTag list = tag.getList("OwnershipList", Tag.TAG_COMPOUND);
             for (int i = 0; i < list.size(); i++) {
@@ -168,15 +188,12 @@ public class GalathOwnershipData extends SavedData {
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
 
-        // Limpieza segura: 200 ticks (10 segundos)
         if (ServerLifecycleHooks.getCurrentServer().getTickCount() % 200 == 0) {
             List<UUID> toRemove = new ArrayList<>();
             ServerLevel world = ServerLifecycleHooks.getCurrentServer().overworld();
 
             for (Map.Entry<UUID, UUID> entry : ownershipMap.entrySet()) {
                 Entity npc = world.getEntity(entry.getValue());
-                // IMPORTANTE: Solo borramos el vínculo si la entidad ESTÁ CARGADA y ESTÁ MUERTA.
-                // Si getEntity devuelve null, significa que el chunk se descargó, NO que murió.
                 if (npc != null && (npc.isRemoved() || !npc.isAlive())) {
                     toRemove.add(entry.getKey());
                 }
@@ -185,6 +202,11 @@ public class GalathOwnershipData extends SavedData {
             if (!toRemove.isEmpty()) {
                 for (UUID pId : toRemove) {
                     ownershipMap.removeByKey(pId);
+                    // Notificamos limpieza por muerte
+                    ServerPlayer sp = ServerLifecycleHooks.getCurrentServer().getPlayerList().getPlayer(pId);
+                    if (sp != null) {
+                        ModNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> sp), new OwnershipSyncPacket(false));
+                    }
                 }
                 markDirtyStatic();
             }
@@ -197,6 +219,7 @@ public class GalathOwnershipData extends SavedData {
             ownershipMap.clear();
             lastDosageTime.clear();
             mangoOwners.clear();
+            clientHasGalath = false;
         }
     }
 

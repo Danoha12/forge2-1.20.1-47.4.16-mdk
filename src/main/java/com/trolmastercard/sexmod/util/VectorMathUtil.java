@@ -1,12 +1,13 @@
 package com.trolmastercard.sexmod.util;
 
+import net.minecraft.util.Mth; // 🚨 AGREGADO para las matemáticas rápidas
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 
 /**
  * VectorMathUtil — Portado a 1.20.1.
  * * Utilidades estáticas para operaciones de vectores (Vec3).
- * * Crucial para el posicionamiento preciso en animaciones y renderizado.
+ * * REPARADO: Se agregó rotateByYaw para la compatibilidad con GalathRenderer.
  */
 public final class VectorMathUtil {
 
@@ -67,6 +68,20 @@ public final class VectorMathUtil {
         return rotateYaw(new Vec3(x, y, z), yawDeg);
     }
 
+    // 🚨 LA PIEZA QUE FALTABA: Rotación rápida por Yaw para las miradas (IK)
+    public static Vec3 rotateByYaw(Vec3 vec, float yawDegrees) {
+        float f = yawDegrees * ((float)Math.PI / 180F);
+        float sin = Mth.sin(f);
+        float cos = Mth.cos(f);
+
+        // Fórmula de rotación en 2D (X y Z) manteniendo la Y intacta
+        double x = vec.x * (double)cos + vec.z * (double)sin;
+        double y = vec.y;
+        double z = vec.z * (double)cos - vec.x * (double)sin;
+
+        return new Vec3(x, y, z);
+    }
+
     // ── Rotación de Huesos (Euler X -> Y -> Z) ───────────────────────────────
 
     /**
@@ -118,5 +133,12 @@ public final class VectorMathUtil {
 
     public static double inverseLerpX(Vec3 minVec, Vec3 maxVec, Vec3 valueVec) {
         return inverseLerp(minVec.x, maxVec.x, valueVec.x);
+    }
+
+    public static Vec3 rotate(Vec3 vec, float angle) {
+        float rad = angle * ((float)Math.PI / 180F);
+        float sin = Mth.sin(rad);
+        float cos = Mth.cos(rad);
+        return new Vec3(vec.x * cos - vec.z * sin, vec.y, vec.x * sin + vec.z * cos);
     }
 }

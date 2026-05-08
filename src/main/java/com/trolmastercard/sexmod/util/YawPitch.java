@@ -1,26 +1,39 @@
-package com.trolmastercard.sexmod.util; // Ajusta a tu paquete de utilidades (o math)
+package com.trolmastercard.sexmod.util;
 
 import java.util.Objects;
 
 /**
  * YawPitch — Portado a 1.20.1.
- * * Par inmutable de (yaw, pitch) en radianes.
- * * * * Nota del herrero: Mantenido como 'class' en lugar de 'record' (Java 17)
- * * para no romper la compatibilidad de acceso directo a los campos públicos (.yaw / .pitch).
+ * * Maneja los ángulos de rotación actuales y del frame anterior (Prev).
+ * * Vital para suavizar animaciones mediante interpolación (LERP).
  */
 public final class YawPitch {
 
     public static final YawPitch ZERO = new YawPitch(0.0F, 0.0F);
 
-    /** Yaw en radianes. */
-    public final float yaw;
+    // Campos públicos para acceso rápido desde los modelos
+    public float yaw;
+    public float pitch;
 
-    /** Pitch en radianes. */
-    public final float pitch;
+    // Campos de interpolación (Frame anterior)
+    public float yawPrev;
+    public float pitchPrev;
 
     public YawPitch(float yaw, float pitch) {
         this.yaw = yaw;
         this.pitch = pitch;
+        // Al nacer, el frame anterior es igual al actual
+        this.yawPrev = yaw;
+        this.pitchPrev = pitch;
+    }
+
+    /**
+     * Guarda los valores actuales en los campos 'Prev'.
+     * ¡Llamar a este método al final del tick de la entidad!
+     */
+    public void updatePrev() {
+        this.yawPrev = this.yaw;
+        this.pitchPrev = this.pitch;
     }
 
     // ── Métodos de Objeto Estándar ───────────────────────────────────────────
@@ -42,5 +55,12 @@ public final class YawPitch {
     @Override
     public int hashCode() {
         return Objects.hash(this.yaw, this.pitch);
+    }
+    // Constructor para capturar el frame actual y el anterior (Prev) de golpe
+    public YawPitch(float yaw, float pitch, float yawPrev, float pitchPrev) {
+        this.yaw = yaw;
+        this.pitch = pitch;
+        this.yawPrev = yawPrev;
+        this.pitchPrev = pitchPrev;
     }
 }

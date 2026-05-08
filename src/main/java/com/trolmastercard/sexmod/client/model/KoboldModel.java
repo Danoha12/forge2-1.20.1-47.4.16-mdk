@@ -94,13 +94,23 @@ public class KoboldModel extends BaseNpcModel<KoboldEntity> {
     private void applyHeadRotation(KoboldEntity entity, AnimationState<KoboldEntity> state, software.bernie.geckolib.core.animation.AnimationProcessor<KoboldEntity> processor) {
         if (entity.getAnimState() != AnimState.NULL || !entity.onGround()) return;
 
-        EntityModelData modelData = state.getData(DataTickets.ENTITY_MODEL_DATA);
-        CoreGeoBone head = processor.getBone("head");
+        double yDelta = Math.abs(Math.abs(entity.yOld) - Math.abs(entity.getY()));
+        if (yDelta > 0.1) return;
+        // if (!entity.shouldFollowLook()) return;
 
-        if (head != null && modelData != null) {
-            // GeckoLib 4 usa radianes: grados * (PI / 180)
-            head.setRotY(modelData.netHeadYaw() * ((float) Math.PI / 180F));
-            head.setRotX(modelData.headPitch() * ((float) Math.PI / 180F));
+        var modelData = state.getData(software.bernie.geckolib.constant.DataTickets.ENTITY_MODEL_DATA);
+        if (modelData == null) return;
+
+        software.bernie.geckolib.core.animatable.model.CoreGeoBone head = processor.getBone("head");
+        if (head != null) {
+            head.setRotY(modelData.netHeadYaw() * ((float) Math.PI / 180.0F));
+            head.setRotX(modelData.headPitch() * ((float) Math.PI / 180.0F));
+        }
+
+        software.bernie.geckolib.core.animatable.model.CoreGeoBone body = processor.getBone("body");
+        if (body == null) body = processor.getBone("dd"); // Respaldo por si el hueso se llama 'dd'
+        if (body != null) {
+            body.setRotY(0.0F);
         }
     }
 
@@ -108,22 +118,29 @@ public class KoboldModel extends BaseNpcModel<KoboldEntity> {
         AnimationController<KoboldEntity> controller = entity.getMainAnimController();
         if (controller == null || controller.getAnimationState() != AnimationController.State.TRANSITIONING) return;
 
-        float progress = 0.25F - entity.getAnimationProgress();
+        float transProgress = entity.getAnimationProgress();
+        float f = 0.25F - transProgress;
+
         CoreGeoBone body = processor.getBone("body");
         if (body == null) return;
 
-        // Desplazamientos técnicos para alinear el modelo durante el inicio de interacciones
-        switch (entity.getAnimState()) {
-            case INTERACTION_TYPE_A -> body.setPosZ(11.43F + progress * -7.0F);
-            case INTERACTION_TYPE_B -> {
-                body.setPosX(1.78F + progress * -1.5F);
-                body.setPosY(13.07F + progress * -11.0F);
-                body.setPosZ(2.05F + progress * -8.0F);
-            }
-            case INTERACTION_TYPE_C -> {
-                body.setPosY(2.85F);
-                body.setPosZ(-7.0F + progress * 4.7F);
-            }
+        AnimState state = entity.getAnimState();
+
+        // 🚨 REPARACIÓN: Type A (Doggy-style entrance)
+        if (AnimState.isOneOf(state, AnimState.STARTDOGGY, AnimState.DOGGYSTART, AnimState.DOGGYSLOW, AnimState.DOGGYFAST)) {
+            body.setPosZ(11.43F + f * -7.0F);
+        }
+        // 🚨 REPARACIÓN: Type B (Standing sex / Missionary / Paizuri)
+        else if (AnimState.isOneOf(state, AnimState.MISSIONARY_START, AnimState.PAIZURI_START, AnimState.RAPE_INTRO)) {
+            body.setPosX(1.78F  + f * -1.5F);
+            body.setPosY(13.07F + f * -11.0F);
+            body.setPosZ(2.05F  + f * -8.0F);
+        }
+        // 🚨 REPARACIÓN: Type C (Cowgirl / Reverse)
+        else if (AnimState.isOneOf(state, AnimState.COWGIRLSTART, AnimState.REVERSE_COWGIRL_START, AnimState.COWGIRL_SITTING_INTRO)) {
+            body.setPosX(0.0F);
+            body.setPosY(2.85F);
+            body.setPosZ(-7.0F + f * 4.7F);
         }
     }
 

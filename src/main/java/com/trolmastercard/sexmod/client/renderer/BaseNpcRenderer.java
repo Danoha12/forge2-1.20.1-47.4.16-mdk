@@ -81,7 +81,10 @@ public abstract class BaseNpcRenderer<T extends BaseNpcEntity> extends GeoEntity
 
         String name = bone.getName();
 
-        // Aplicar ocultamiento de huesos
+        // 1. ¡Llamamos al gancho para las físicas y el Offhand! (Lo que le faltaba a Jenny)
+        onBoneProcess(name, bone);
+
+        // 2. Aplicar ocultamiento de huesos
         if (this.hiddenBoneSet.contains(name)) {
             bone.setHidden(true);
             return; // No renderizamos este hueso ni sus hijos
@@ -89,7 +92,7 @@ public abstract class BaseNpcRenderer<T extends BaseNpcEntity> extends GeoEntity
             bone.setHidden(false);
         }
 
-        // Aplicar color personalizado por hueso (Blanco por defecto)
+        // 3. Aplicar color personalizado por hueso (Blanco por defecto)
         net.minecraft.core.Vec3i color = getBoneColor(name);
         float r = (color.getX() / 255.0f) * red;
         float g = (color.getY() / 255.0f) * green;
@@ -132,4 +135,8 @@ public abstract class BaseNpcRenderer<T extends BaseNpcEntity> extends GeoEntity
             // Lógica para actualizar colisiones o partes de la entidad si es necesario
         });
     }
+// ── Ganchos de Personalización ───────────────────────────────────────────
+
+    /** Callback por cada hueso antes de dibujarse (Físicas/Items) */
+    protected void onBoneProcess(String boneName, GeoBone bone) {}
 }

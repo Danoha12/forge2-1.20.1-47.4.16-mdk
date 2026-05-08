@@ -13,8 +13,9 @@ import software.bernie.geckolib.model.GeoModel;
  */
 public class GoblinHandRenderer extends NpcArmRenderer<BaseNpcEntity> {
 
-    public GoblinHandRenderer(GeoModel<BaseNpcEntity> model) {
-        super(model);
+    // Ahora recibimos el "Context" y se lo pasamos al "super"
+    public GoblinHandRenderer(net.minecraft.client.renderer.entity.EntityRendererProvider.Context context, GeoModel<BaseNpcEntity> model) {
+        super(context, model);
     }
 
     // ── Transformaciones Base del Mundo ───────────────────────────────────────
@@ -45,9 +46,11 @@ public class GoblinHandRenderer extends NpcArmRenderer<BaseNpcEntity> {
 
     // ── Transformaciones en Primera Persona ───────────────────────────────────
 
+    // ── Transformaciones en Primera Persona ───────────────────────────────────
+
     @Override
-    protected void applyHandTransform(PoseStack poseStack, boolean isRightHand) {
-        super.applyHandTransform(poseStack, isRightHand);
+    protected void applyEmptyHandTransform(PoseStack poseStack, boolean isRightHand) {
+        super.applyEmptyHandTransform(poseStack, isRightHand);
 
         // Empuja la mano derecha un poco más hacia el centro de la pantalla
         if (isRightHand) {

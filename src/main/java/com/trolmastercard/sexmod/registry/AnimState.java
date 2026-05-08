@@ -22,7 +22,7 @@ public enum AnimState {
     SUCKBLOWJOB_BLINK (2,  true,  true),
     CUMBLOWJOB        (0,  true,  false),
     THRUSTBLOWJOB     (2,  true,  false),
-
+    BLOWJOBINTRO      ( 2, true, false),
     // -------------------------------------------------------------------------
     //  Misc NPC actions
     // -------------------------------------------------------------------------
@@ -48,7 +48,7 @@ public enum AnimState {
     DOGGYSLOW         (2,  true,  false),
     DOGGYFAST         (2,  true,  false),
     DOGGYCUM          (2,  true,  false),
-
+    DOGGYGOONBED      ( 2, true, false),
     // -------------------------------------------------------------------------
     //  Sitting / Cowgirl
     // -------------------------------------------------------------------------
@@ -68,7 +68,7 @@ public enum AnimState {
     SIT               (0,  false, true),
     THROW_PEARL       (0,  false, false),
     DOWNED            (7,  false, true),
-
+    KNOCK_OUT_SLOW    (3, false, false),
     // -------------------------------------------------------------------------
     //  Paizuri
     // -------------------------------------------------------------------------
@@ -369,6 +369,7 @@ public enum AnimState {
         this.maxGirlPitch = maxPitch;
         this.minGirlPitch = minPitch;
         this.flipGirlYaw = flipYaw;
+        this.length = 1000;
     }
 
     AnimState(int transitionTick, boolean hasPlayer, boolean autoBlink, float maxPitch, float minPitch, boolean flipYaw, boolean hideNameTag) {
@@ -436,11 +437,12 @@ public enum AnimState {
     public static float getElapsedTicks(BaseNpcEntity entity, float partialTick) {
         AnimationController<?> controller = entity.getMainAnimationController();
         if (controller == null) return 0.0F;
-        // GeckoLib 4: Uso del manager oficial para obtener el tick exacto
-        double managerTick = entity.getAnimatableInstanceCache()
-                .getManagerForId(entity.getUUID().hashCode())
-                .getTick(entity);
-        return (float)(managerTick + partialTick - controller.tickOffset);
+
+        // 🚨 GeckoLib 4: El manager ya no lleva la cuenta.
+        // Nos colgamos directo del reloj de tu NPC (o usa entity.tickCount si lo prefieres)
+        double managerTick = entity.getAnimTick();
+
+        return (float)(managerTick + partialTick);
     }
 
     @OnlyIn(Dist.CLIENT)
@@ -450,14 +452,28 @@ public enum AnimState {
 
     @OnlyIn(Dist.CLIENT)
     public static float getAnimationProgress(BaseNpcEntity entity, float partialTick) {
-        float length = getAnimationLength(entity);
-        if (length <= 0.0F) return 0.0F;
-        // Sincronización basada en segundos para GeckoLib 4
-        return Mth.clamp(getElapsedSeconds(entity, partialTick) / length, 0.0F, 1.0F);
+        AnimationController<?> controller = entity.getMainAnimationController();
+        if (controller == null || controller.getCurrentAnimation() == null) return 0.0F;
+
+        // Longitud en segundos
+        double lengthInSeconds = controller.getCurrentAnimation().animation().length();
+        // Tiempo actual en ticks convertido a segundos
+        float elapsedSeconds = (entity.getAnimTick() + partialTick) / 20.0F;
+
+        if (lengthInSeconds <= 0) return 0.0F;
+        return Mth.clamp((float) (elapsedSeconds / lengthInSeconds), 0.0F, 1.0F);
     }
 
     @OnlyIn(Dist.CLIENT)
     public static boolean isAnimationFinished(BaseNpcEntity entity, float partialTick) {
         return getAnimationProgress(entity, partialTick) >= 1.0F;
+    }
+
+    public static boolean anyOf(AnimState current, AnimState... targets) {
+        if (current == null) return false;
+        for (AnimState target : targets) {
+            if (current == target) return true;
+        }
+        return false;
     }
 }

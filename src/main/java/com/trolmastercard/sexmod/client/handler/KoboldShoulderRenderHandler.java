@@ -68,10 +68,11 @@ public class KoboldShoulderRenderHandler {
         kobold.xRotO = player.xRotO;
 
         // Sincronización de físicas y flags
-        kobold.setOnGround(player.isOnGround());
+        kobold.setOnGround(player.onGround());
         kobold.setSprinting(player.isSprinting());
         kobold.setShiftKeyDown(player.isShiftKeyDown());
-        kobold.isFallFlying = player.isFallFlying();
+        boolean flying = player.isFallFlying();
+        kobold.setFlying(player.isFallFlying());
 
         // Sincronización de animaciones de caminata (1.20.1 usa walkAnimation)
         kobold.walkAnimation.setSpeed(player.walkAnimation.speed());
@@ -81,9 +82,9 @@ public class KoboldShoulderRenderHandler {
         double yawRad = Math.toRadians(player.getYRot());
         double dx = player.xo - player.getX();
         double dz = player.zo - player.getZ();
-        kobold.footOffset = new Vector2f(
-                (float)(dx * Math.cos(yawRad) + dz * Math.sin(yawRad)),
-                (float)(dx * Math.sin(yawRad) + dz * Math.cos(yawRad))
+        kobold.footOffset = new org.joml.Vector2f(
+                (float) player.getXRot(), // O los valores que uses para el offset
+                (float) player.getYRot()
         );
 
         // Aplicar offset vertical si está en modo "hombro"

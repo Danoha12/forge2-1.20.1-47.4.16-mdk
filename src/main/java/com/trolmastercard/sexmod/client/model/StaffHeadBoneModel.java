@@ -79,7 +79,9 @@ public class StaffHeadBoneModel extends EntityModel<Entity> implements IBoneAcce
 
     // 🚨 CORREGIDO: Usando el estándar getRootBone() de tus otras clases
     @Override
-    public ModelPart getRootBone() {
+    public ModelPart getBoneRoot() {
+        // Ojo: Asegúrate de devolver la variable principal de esta clase.
+        // Puede que aquí se llame this.root, this.headPart, o this.main.
         return this.rootPart;
     }
 }

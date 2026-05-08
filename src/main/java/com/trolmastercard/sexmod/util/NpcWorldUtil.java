@@ -1,6 +1,5 @@
 package com.trolmastercard.sexmod.util;
 
-import com.trolmastercard.sexmod.client.FakeWorld;
 import com.trolmastercard.sexmod.util.MathUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -44,7 +43,7 @@ public class NpcWorldUtil {
      */
     public static Vec3 computeSexmodLightDir(LivingEntity entity, float partial) {
         Level world = entity.level();
-        if (world instanceof FakeWorld) return new Vec3(0, 1, 0);
+        if (world == null) return new Vec3(0, 1, 0);
 
         BlockPos center = entity.blockPosition();
         Map<Vec3, Integer> brightMap = new HashMap<>();

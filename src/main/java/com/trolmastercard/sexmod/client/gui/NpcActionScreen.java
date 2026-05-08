@@ -179,8 +179,7 @@ public class NpcActionScreen extends Screen {
                     // Sonido de desaprobación (Usando el sistema que definiste antes)
                     return;
                 }
-                ModNetwork.CHANNEL.sendToServer(new RemoveItemsPacket(player.getUUID(), cost));
-            }
+                ModNetwork.CHANNEL.sendToServer(new RemoveItemsPacket(cost));            }
         }
 
         // Ejecutar acción

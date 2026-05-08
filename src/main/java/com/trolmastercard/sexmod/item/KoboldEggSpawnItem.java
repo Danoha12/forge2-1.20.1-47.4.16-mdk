@@ -1,7 +1,7 @@
 package com.trolmastercard.sexmod.item;
 
 import com.trolmastercard.sexmod.client.renderer.item.KoboldEggItemRenderer;
-import com.trolmastercard.sexmod.entity.KoboldEgg;
+import com.trolmastercard.sexmod.entity.KoboldEggEntity;
 import com.trolmastercard.sexmod.util.EyeAndKoboldColor;
 import com.trolmastercard.sexmod.registry.ModEntities;
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
@@ -51,7 +51,7 @@ public class KoboldEggSpawnItem extends Item implements GeoItem {
         Player player = ctx.getPlayer();
 
         // Crear la entidad del huevo
-        KoboldEgg egg = new KoboldEgg(ModEntities.KOBOLD_EGG.get(), level);
+        KoboldEggEntity egg = new KoboldEggEntity(ModEntities.KOBOLD_EGG.get(), level);
 
         // Posicionar el huevo ligeramente arriba del punto de impacto para evitar que se atore
         egg.moveTo(hitPos.x, hitPos.y, hitPos.z, 0.0F, 0.0F);
@@ -59,16 +59,20 @@ public class KoboldEggSpawnItem extends Item implements GeoItem {
         // 1. Asignar Color: Convertimos el 'damage' del ítem al nombre del color
         int colorId = stack.getDamageValue();
         String colorName = EyeAndKoboldColor.getColorByWoolId(colorId).toString();
-        egg.getEntityData().set(KoboldEgg.BODY_COLOR, colorName);
+        egg.getEntityData().set(KoboldEggEntity.EGG_COLOR, colorName);
 
         // 2. Asignar Tribu: Leemos el UUID del NBT si existe
         CompoundTag nbt = stack.getTag();
         if (nbt != null && nbt.contains("tribeID")) {
             try {
-                egg.setTribeId(UUID.fromString(nbt.getString("tribeID")));
+                UUID newTribeId = UUID.fromString(nbt.getString("tribeID"));
+                // Como tribeId es privado en la entidad, lo pasamos por NBT
+                CompoundTag eggData = new CompoundTag();
+                egg.saveWithoutId(eggData);
+                eggData.putUUID("TribeId", newTribeId);
+                egg.load(eggData);
             } catch (IllegalArgumentException e) {
-                // Si el UUID está corrupto, generamos uno nuevo
-                egg.setTribeId(UUID.randomUUID());
+                // Si falla, el huevo generará uno nuevo al eclosionar
             }
         }
 

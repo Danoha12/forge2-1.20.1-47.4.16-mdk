@@ -108,10 +108,18 @@ public class CustomModelManager {
                 String json = readFile(geoFile);
                 entry.geoResourceLocation = new ResourceLocation(ModConstants.MOD_ID, name.toLowerCase() + "_model");
 
-                var bakedModel = BakedModelFactory.getForNamespace()
-                        .constructGeoModel(KeyFramesAdapter.GEO_GSON
-                                .fromJson(json, software.bernie.geckolib.loading.json.raw.GeometryModelData.class));
+                // 1. Convertimos tu texto a un objeto JSON genérico usando la herramienta base de Java
+                com.google.gson.JsonObject jsonObject = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
 
+                // 2. Usamos el nuevo escáner de GeckoLib 4 (JsonUtil) para sacar el plano crudo (Model.class)
+                var rawModel = software.bernie.geckolib.util.JsonUtil.GEO_GSON.fromJson(jsonObject, software.bernie.geckolib.loading.json.raw.Model.class);
+
+                // 3. Armamos el esqueleto (GeometryTree) que exige la versión 1.20.1
+                var geometryTree = software.bernie.geckolib.loading.object.GeometryTree.fromModel(rawModel);
+
+                // 4. Ahora sí, ¡lo metemos al horno de la aduana!
+                var bakedModel = software.bernie.geckolib.loading.object.BakedModelFactory.getForNamespace(ModConstants.MOD_ID)
+                        .constructGeoModel(geometryTree);
                 GeckoLibCache.getBakedModels().put(entry.geoResourceLocation, bakedModel);
             } catch (Exception e) {
                 return "Error al hornear modelo: " + e.getMessage();
@@ -132,9 +140,13 @@ public class CustomModelManager {
     }
 
     private static ResourceLocation loadTexture(String name, File file) throws IOException {
-        BufferedImage img = ImageIO.read(file);
-        DynamicTexture tex = new DynamicTexture(img);
-        return Minecraft.getInstance().getTextureManager().register("custom_" + name.toLowerCase(), tex);
+        // 🚨 En 1.20.1 usamos FileInputStream y NativeImage
+        // Usamos un bloque "try" para asegurarnos de cerrar el archivo al terminar de leerlo
+        try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
+            com.mojang.blaze3d.platform.NativeImage img = com.mojang.blaze3d.platform.NativeImage.read(fis);
+            DynamicTexture tex = new net.minecraft.client.renderer.texture.DynamicTexture(img);
+            return Minecraft.getInstance().getTextureManager().register("custom_" + name.toLowerCase(), tex);
+        }
     }
 
     private static String readFile(File file) throws IOException {
@@ -204,8 +216,7 @@ public class CustomModelManager {
             if (event.getEntity() == Minecraft.getInstance().player && !joinedOnce) {
                 joinedOnce = true;
                 // Aquí podrías enviar el ModelListPacket al servidor
-                ModNetwork.CHANNEL.sendToServer(new ModelListPacket());
-            }
+                ModNetwork.CHANNEL.sendToServer(new ModelListPacket(new java.util.HashMap<>()));            }
         }
 
         @SubscribeEvent

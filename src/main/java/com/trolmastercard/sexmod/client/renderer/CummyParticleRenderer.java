@@ -15,6 +15,8 @@ import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraft.world.phys.Vec3;
+import com.mojang.blaze3d.vertex.PoseStack;
 
 import javax.annotation.Nonnull;
 import java.util.List;
@@ -46,7 +48,7 @@ public class CummyParticleRenderer {
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
         RenderSystem.setShaderTexture(0, TEXTURE);
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-
+        PoseStack poseStack = event.getPoseStack();
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.enableDepthTest();
@@ -58,8 +60,11 @@ public class CummyParticleRenderer {
         // Iniciamos el dibujado (Asumiendo que PhysicsParticle usa POSITION_TEX)
         builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
 
+        Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition(); // Sacamos la cámara
+
         for (PhysicsParticle p : PARTICLES) {
-            p.render(mc, tessellator, builder, partialTick);
+            // 🚨 Pasamos: poseStack, builder, partialTick y cameraPos
+            p.render(poseStack, builder, partialTick, cameraPos);
         }
 
         tessellator.end();

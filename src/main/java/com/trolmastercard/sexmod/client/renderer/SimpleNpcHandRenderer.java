@@ -2,6 +2,7 @@ package com.trolmastercard.sexmod.client.renderer; // Ajusta a tu paquete de ren
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.trolmastercard.sexmod.NpcHandRenderer;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.world.item.ItemStack;

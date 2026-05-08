@@ -2,6 +2,7 @@ package com.trolmastercard.sexmod.client.renderer; // Ajusta a tu paquete de ren
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.trolmastercard.sexmod.NpcHandRenderer;
 import com.trolmastercard.sexmod.entity.AllieEntity;
 import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
@@ -11,7 +12,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.UseAnim;
-import software.bernie.geckolib.cache.object.CoreGeoBone;
+import software.bernie.geckolib.cache.object.GeoBone;
 import software.bernie.geckolib.model.GeoModel;
 
 /**
@@ -84,7 +85,7 @@ public class TailPhysicsNpcRenderer extends NpcHandRenderer {
     // ── Físicas de Huesos (On-the-fly) ───────────────────────────────────────
 
     // Asumo que tienes un método similar en NpcHandRenderer o que lo llamas desde el preRender de GeckoLib
-    protected void onBoneProcess(String boneName, CoreGeoBone bone, BaseNpcEntity npc) {
+    protected void onBoneProcess(String boneName, GeoBone bone, BaseNpcEntity npc) {
         if (npc == null || npc.getEntityData().get(BaseNpcEntity.FROZEN)) return;
 
         // Intentamos obtener al dueño para calcular la inercia en base a él
@@ -119,7 +120,7 @@ public class TailPhysicsNpcRenderer extends NpcHandRenderer {
         }
     }
 
-    private void applyTailPhysics(CoreGeoBone bone, BaseNpcEntity npc, double dx, double dz,
+    private void applyTailPhysics(GeoBone bone, BaseNpcEntity npc, double dx, double dz,
                                   float baseX, float baseZ, float scale, float partialTick) {
         double yaw = Math.toRadians(npc.getYRot());
 
@@ -138,7 +139,7 @@ public class TailPhysicsNpcRenderer extends NpcHandRenderer {
         bone.setRotZ(baseZ + this.tailRotZ * scale);
     }
 
-    private void applyBodyPhysics(CoreGeoBone bone, BaseNpcEntity npc, double dx, double dz, float partialTick) {
+    private void applyBodyPhysics(GeoBone bone, BaseNpcEntity npc, double dx, double dz, float partialTick) {
         float speed = Mth.clamp((float) ((Math.abs(dx) + Math.abs(dz)) * BODY_SCALE), 0.0F, 1.0F);
 
         // Suavizado dinámico

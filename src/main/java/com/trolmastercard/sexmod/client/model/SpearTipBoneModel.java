@@ -63,7 +63,7 @@ public class SpearTipBoneModel extends EntityModel<Entity> implements IBoneAcces
 
     // 🚨 CORREGIDO: Estandarizado a getRootBone() para coincidir con SpearModel
     @Override
-    public ModelPart getRootBone() {
+    public ModelPart getBoneRoot() { // 👈 ¡Ojo aquí! Es getBoneRoot, no getRootBone
         return this.rootPart;
     }
 

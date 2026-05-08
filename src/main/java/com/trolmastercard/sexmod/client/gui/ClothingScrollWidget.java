@@ -56,7 +56,8 @@ public class ClothingScrollWidget extends ObjectSelectionList<ClothingScrollWidg
 
     @Override
     protected int getScrollbarPosition() {
-        return this.getX() + this.width - 6;
+        // En 1.20.1, x0 es la coordenada X izquierda de la lista
+        return this.x0 + this.width - 6;
     }
 
     @Override
@@ -88,7 +89,16 @@ public class ClothingScrollWidget extends ObjectSelectionList<ClothingScrollWidg
             this.slot = null;
             this.names = null;
         }
+// ── Accesibilidad Obligatoria 1.20.1 ─────────────────────────────────────
 
+        /**
+         * Mojang exige que todas las listas tengan soporte para el Narrador.
+         * Le devolvemos un texto vacío para que no haga ruido y nos deje compilar.
+         */
+        @Override
+        public net.minecraft.network.chat.Component getNarration() {
+            return net.minecraft.network.chat.Component.empty();
+        }
         @Override
         public void render(GuiGraphics graphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean isHovered, float partialTick) {
             if (isFooter) {

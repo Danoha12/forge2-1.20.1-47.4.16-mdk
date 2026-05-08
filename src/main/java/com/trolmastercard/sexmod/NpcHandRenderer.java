@@ -185,7 +185,7 @@ public class NpcHandRenderer {
         tes.end();
 
         if (item.getItem() instanceof MapItem mapItem) {
-            var mapData = mapItem.getMapData(item, mc.level);
+            var mapData = mapItem.getSavedData(item, mc.level);
             if (mapData != null) {
                 mc.gameRenderer.getMapRenderer().render(ps, bufs, mapData, false, light);
             }

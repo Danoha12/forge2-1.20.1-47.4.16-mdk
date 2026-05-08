@@ -18,7 +18,8 @@ public class BeeBodyRenderer extends BaseNpcRenderer<BeeEntity> {
 
     // Constructor actualizado para 1.20.1 exigiendo el Context del RenderProvider
     public BeeBodyRenderer(EntityRendererProvider.Context context, GeoModel<BeeEntity> model) {
-        super(context, model, 0.5f); // 0.5f es el tamaño de la sombra por defecto
+        super(context, model); // Solo le pasamos las dos piezas que pide el padre
+        this.shadowRadius = 0.5f; // Ajustamos la sombra de forma independiente
     }
 
     /**

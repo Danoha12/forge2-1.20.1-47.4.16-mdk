@@ -59,7 +59,7 @@ public class AllieRenderer extends BaseNpcRenderer<AllieEntity> {
     // ── Name tag suppression (Optimizado para 1.20.1) ─────────────────────────
 
     @Override
-    protected boolean shouldShowName(AllieEntity entity) {
+    public boolean shouldShowName(AllieEntity entity) {
         // Ocultar si el estado es NULL
         if (entity.getAnimState() == AnimState.NULL) return false;
 

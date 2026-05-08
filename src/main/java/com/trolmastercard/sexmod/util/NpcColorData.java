@@ -25,4 +25,30 @@ public class NpcColorData {
     public static void applyTinting(Object entity, float partialTick) {
         // stub
     }
+// ── Lógica de Descarga de Skins ──────────────────────────────────────────
+
+    /**
+     * Carga una nueva textura de skin para el NPC y la guarda en el caché.
+     */
+    // ── Lógica de Descarga de Skins ──────────────────────────────────────────
+
+    /**
+     * Carga una nueva textura de skin para el NPC y la guarda en el caché.
+     */
+    public static NpcSkinTexture loadSkinTexture(java.util.UUID skinUUID, net.minecraft.world.level.Level level) {
+
+        // 1. Creamos un perfil de jugador temporal solo con el UUID
+        com.mojang.authlib.GameProfile profile = new com.mojang.authlib.GameProfile(skinUUID, null);
+
+        // 2. Le pedimos a Minecraft 1.20.1 que nos dé la textura (ResourceLocation) de ese perfil
+        net.minecraft.resources.ResourceLocation skinLoc = net.minecraft.client.Minecraft.getInstance().getSkinManager().getInsecureSkinLocation(profile);
+
+        // 3. 🚨 REPARADO: Ahora sí, le entregamos el ResourceLocation a tu constructor
+        NpcSkinTexture newTexture = new NpcSkinTexture(skinLoc);
+
+        // 4. Lo guardamos en el archivero (Caché) para no tener que repetir esto
+        NpcSkinTexture.getCache().put(skinUUID, newTexture);
+
+        return newTexture;
+    }
 }

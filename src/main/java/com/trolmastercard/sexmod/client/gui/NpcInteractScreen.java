@@ -13,9 +13,9 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
-
+import net.minecraft.world.entity.player.Player;
 import java.util.UUID;
-
+import net.minecraft.world.entity.player.Player;
 /**
  * NpcInteractScreen — Portado a 1.20.1.
  * * Menú radial de acción rápida. Aparece al mantener presionada la tecla de Interacción.

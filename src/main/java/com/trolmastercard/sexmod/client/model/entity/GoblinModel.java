@@ -22,7 +22,7 @@ import java.util.UUID;
  * * Define el modelo 3D del Goblin y manipula dinámicamente sus huesos (IK)
  * basándose en el estado de la animación (ej. embarazo, mirada, ser lanzado).
  */
-public class GoblinModel extends BaseNpcModel<BaseNpcEntity> {
+public class GoblinModel extends BaseNpcModel<GoblinEntity> {
 
     private static final float MAX_TOSS_ANGLE = 60.0F;
     private static final float HEAD_PITCH_CLAMP = 0.75F;
@@ -38,12 +38,12 @@ public class GoblinModel extends BaseNpcModel<BaseNpcEntity> {
     }
 
     @Override
-    public ResourceLocation getTextureResource(BaseNpcEntity entity) {
+    public ResourceLocation getTextureResource(GoblinEntity entity) {
         return new ResourceLocation("sexmod", "textures/entity/goblin/goblin.png");
     }
 
     @Override
-    public ResourceLocation getAnimationResource(BaseNpcEntity entity) {
+    public ResourceLocation getAnimationResource(GoblinEntity entity) {
         return new ResourceLocation("sexmod", "animations/goblin/goblin.animation.json");
     }
 
@@ -64,12 +64,12 @@ public class GoblinModel extends BaseNpcModel<BaseNpcEntity> {
     // ── Manipulación Manual de Huesos (GeckoLib 4) ──────────────────────────
 
     @Override
-    public void setCustomAnimations(BaseNpcEntity entity, long instanceId, AnimationState<BaseNpcEntity> animState) {
+    public void setCustomAnimations(GoblinEntity entity, long instanceId, AnimationState<GoblinEntity> animState) {
         super.setCustomAnimations(entity, instanceId, animState);
 
-        if (entity.level() instanceof FakeWorld) return;
+        if (entity.level() == null) return;
 
-        AnimationProcessor<BaseNpcEntity> proc = getAnimationProcessor();
+        AnimationProcessor<GoblinEntity> proc = getAnimationProcessor();
         boolean isGoblin = entity instanceof GoblinEntity;
         AnimState state = entity.getAnimState();
 
@@ -112,7 +112,7 @@ public class GoblinModel extends BaseNpcModel<BaseNpcEntity> {
         }
 
         if (state == AnimState.THROWN || state == AnimState.START_THROWING) {
-            Vec3 disp = BaseNpcEntity.getBodyDisplacement(entity);
+            Vec3 disp = GoblinEntity.getBodyDisplacement(entity);
             if (body != null) {
                 body.updateRotation((float) disp.x, body.getRotY(), body.getRotZ());
                 body.updatePosition(body.getPosX(), (float) disp.y, (float) disp.z);
@@ -132,7 +132,7 @@ public class GoblinModel extends BaseNpcModel<BaseNpcEntity> {
 
     // ── Helpers de Cinemática (IK) y Rotación ───────────────────────────────
 
-    private void applyPickUpBones(AnimationProcessor<BaseNpcEntity> proc, BaseNpcEntity entity) {
+    private void applyPickUpBones(AnimationProcessor<GoblinEntity> proc, GoblinEntity entity) {
         UUID masterUUID = entity.getMasterUUID();
         if (masterUUID == null || mc.player == null) return;
 
@@ -180,7 +180,7 @@ public class GoblinModel extends BaseNpcModel<BaseNpcEntity> {
         head.updateRotation(pitch, (float) Math.toRadians(targetYaw), head.getRotZ());
     }
 
-    private void applyArmLegIK(AnimationProcessor<BaseNpcEntity> proc, BaseNpcEntity entity) {
+    private void applyArmLegIK(AnimationProcessor<GoblinEntity> proc, GoblinEntity entity) {
         UUID masterUUID = entity.getMasterUUID();
         if (masterUUID == null) return;
 
@@ -201,7 +201,7 @@ public class GoblinModel extends BaseNpcModel<BaseNpcEntity> {
         if (rightLeg != null) rightLeg.updateRotation(-legSwing, rightLeg.getRotY(), rightLeg.getRotZ());
     }
 
-    private void applyArmHideIfNeeded(AnimationProcessor<BaseNpcEntity> proc, BaseNpcEntity entity) {
+    private void applyArmHideIfNeeded(AnimationProcessor<GoblinEntity> proc, GoblinEntity entity) {
         if (entity.getAnimState() != AnimState.PICK_UP) return;
 
         UUID masterUUID = entity.getMasterUUID();

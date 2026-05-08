@@ -140,4 +140,10 @@ public abstract class NpcInventoryBase extends BaseNpcEntity implements Containe
             this.inventoryHandler.setStackInSlot(i, ItemStack.EMPTY);
         }
     }
+    // Añade esto dentro de NpcInventoryBase.java
+    public abstract String getNpcName();
+
+    public float getNametagOffsetY() {
+        return 0.0F; // Valor por defecto
+    }
 }

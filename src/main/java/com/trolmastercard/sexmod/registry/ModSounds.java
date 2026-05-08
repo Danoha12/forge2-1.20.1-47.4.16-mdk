@@ -183,4 +183,16 @@ public class ModSounds {
         if (soundArray == null || soundArray.length == 0) return null;
         return soundArray[random.nextInt(soundArray.length)].get();
     }
+    public static net.minecraft.sounds.SoundEvent pickRandom(
+            net.minecraftforge.registries.RegistryObject<net.minecraft.sounds.SoundEvent>[] sounds) {
+
+        // Medida de seguridad por si la lista está vacía
+        if (sounds == null || sounds.length == 0) {
+            return null;
+        }
+
+        // Escoge un número al azar basado en el tamaño de la lista
+        int randomIndex = new java.util.Random().nextInt(sounds.length);
+        return sounds[randomIndex];
+    }
 }

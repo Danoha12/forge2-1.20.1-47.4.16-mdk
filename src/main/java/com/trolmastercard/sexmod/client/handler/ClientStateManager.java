@@ -69,6 +69,12 @@ public class ClientStateManager {
         if (player != null) {
             player.setDeltaMovement(0, 0, 0);
         }
+        // Ejemplo de cómo actualizar el progreso si tienes acceso al NPC
+        if (player.getVehicle() instanceof BaseNpcEntity npc) {
+            float totalDuration = 40.0F; // Duración estimada en ticks de la fase actual
+            float progress = (float)npc.getAnimTick() / totalDuration;
+            SexAnimationTracker.setProgress(progress);
+        }
     }
 
     // ── API Pública ──────────────────────────────────────────────────────────
@@ -104,5 +110,38 @@ public class ClientStateManager {
 
         // true en displayClientMessage manda el mensaje a la ActionBar (encima de la hotbar)
         player.displayClientMessage(Component.literal("Presiona SALTAR (Jump) para salir de la animación"), true);
+    }
+    private static boolean allieActive = false;
+
+    public static void setAllieActive(boolean value) {
+        allieActive = value;
+    }
+
+    public static boolean isAllieActive() {
+        return allieActive;
+    }
+    private static boolean leader = false;
+
+    public static void setLeader(boolean value) {
+        leader = value;
+    }
+
+    public static boolean isLeader() {
+        return leader;
+    }
+    public static void triggerBlackScreen() {
+        // En el futuro, aquí llamarás a tu lógica de renderizado de GUI
+        // para dibujar un rectángulo negro que cubra la pantalla.
+        if (net.minecraft.client.Minecraft.getInstance().player != null) {
+            // Lógica de fade-out
+        }
+    }
+    private static boolean isFrozen = false;
+    public static void setFreeze(boolean freeze) {
+        isFrozen = freeze;
+    }
+    public static boolean isThirdPerson() {
+        // Le preguntamos a las opciones del juego si la cámara NO está en primera persona
+        return !net.minecraft.client.Minecraft.getInstance().options.getCameraType().isFirstPerson();
     }
 }

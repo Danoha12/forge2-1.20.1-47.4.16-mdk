@@ -144,4 +144,25 @@ public abstract class NpcModelCodeEntity extends BaseNpcEntity {
     public static String[] parseCode(NpcModelCodeEntity entity) {
         return entity.getEntityData().get(MODEL_CODE).split("-");
     }
+    public static String[] getModelCodeSegments(NpcModelCodeEntity entity) {
+        // Sacamos el string del ADN desde los datos sincronizados
+        String code = entity.getEntityData().get(MODEL_CODE);
+
+        // Protección anti-crasheos por si la entidad apenas está apareciendo
+        if (code == null || code.isEmpty()) {
+            // Devolvemos un arreglo lleno de "0"s para evitar errores de IndexOutOfBounds
+            return new String[]{"0","0","0","0","0","0","0","0","0","0","0","0"};
+        }
+
+        // Dependiendo de cómo lo hayas programado en la 1.12.2, el ADN puede estar separado por guiones "1-2-0-4"
+        // o pegado "1204". Si tu código tiene números de dos dígitos (ej. color 12), seguramente usa guiones.
+        if (code.contains("-")) {
+            return code.split("-");
+        } else if (code.contains(":")) {
+            return code.split(":");
+        } else {
+            // Si no hay separadores, partimos la cadena número por número
+            return code.split("");
+        }
+    }
 }

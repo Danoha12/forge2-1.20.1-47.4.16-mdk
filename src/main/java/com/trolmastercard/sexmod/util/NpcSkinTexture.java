@@ -18,4 +18,11 @@ public class NpcSkinTexture {
 
     public ResourceLocation getLocation() { return location; }
     public boolean isCustom() { return isCustom; }
+    // 🚨 LA PIEZA FANTASMA: El caché estático para guardar las skins
+    private static final java.util.Map<java.util.UUID, NpcSkinTexture> CACHE = new java.util.HashMap<>();
+
+    // 🚨 EL MÉTODO QUE BUSCABA EL RENDERIZADOR
+    public static java.util.Map<java.util.UUID, NpcSkinTexture> getCache() {
+        return CACHE;
+    }
 }

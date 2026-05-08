@@ -3,7 +3,7 @@ package com.trolmastercard.sexmod.client.renderer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
-import com.trolmastercard.sexmod.util.RgbColor;
+import com.trolmastercard.sexmod.util.RgbaColor;
 import com.trolmastercard.sexmod.util.VectorRotateUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -32,7 +32,7 @@ public final class NpcBoneQuadBuilder {
     }
 
     /** Construye una caja de 6 caras uniendo 2 huesos (ej: Mating Press) */
-    public static Vec3[][] buildBoxQuads(BaseNpcEntity npc, float partialTick, String b1, String b2, RgbColor ext1, RgbColor ext2) {
+    public static Vec3[][] buildBoxQuads(BaseNpcEntity npc, float partialTick, String b1, String b2, RgbaColor ext1, RgbaColor ext2) {
         Vec3[] corners = computeBoxCorners(npc, partialTick, b1, b2, ext1, ext2);
         return buildBoxFaces(corners);
     }

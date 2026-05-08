@@ -1,8 +1,11 @@
 package com.trolmastercard.sexmod.entity.ai;
 
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
+import com.trolmastercard.sexmod.entity.ai.goal.GoalState;
+import com.trolmastercard.sexmod.entity.ai.goal.NpcGoalBase;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.goal.Goal;
 
 /**
  * KoboldFollowLeaderGoal — Portado a 1.20.1.
@@ -17,7 +20,7 @@ public class KoboldFollowLeaderGoal extends NpcGoalBase {
     public KoboldFollowLeaderGoal(BaseNpcEntity npc) {
         super(npc);
         // Marcamos que este objetivo ocupa los slots de MOVIMIENTO y MIRADA
-        this.setFlags(java.util.EnumSet.of(Flag.MOVE, Flag.LOOK));
+        this.setFlags(java.util.EnumSet.of(Goal.Flag.MOVE, Flag.LOOK));
     }
 
     @Override
@@ -93,5 +96,15 @@ public class KoboldFollowLeaderGoal extends NpcGoalBase {
         if (this.f == GoalState.FOLLOW && this.d.tickCount % 10 == 0) {
             updateSpeed();
         }
+    }
+
+    @Override
+    protected State computeNextState() {
+        return null;
+    }
+
+    @Override
+    protected void handleState(State state) {
+
     }
 }

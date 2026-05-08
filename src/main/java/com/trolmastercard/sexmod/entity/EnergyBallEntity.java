@@ -151,7 +151,7 @@ public class EnergyBallEntity extends Entity {
         if (this.level().isClientSide() || this.isRemoved()) return false;
 
         // 1. Despawn por el vacío
-        if (source.is(DamageTypes.OUT_OF_WORLD)) {
+        if (source.is(DamageTypes.FELL_OUT_OF_WORLD)) {
             this.discard();
             return true;
         }

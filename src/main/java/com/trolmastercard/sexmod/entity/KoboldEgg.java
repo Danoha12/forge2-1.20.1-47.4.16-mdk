@@ -18,37 +18,45 @@ import net.minecraft.world.entity.ai.control.MoveControl;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.level.Level;
+import software.bernie.geckolib.animatable.GeoEntity;
+import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
+import software.bernie.geckolib.core.animation.AnimatableManager;
+import software.bernie.geckolib.util.GeckoLibUtil;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.UUID;
 
 /**
- * KoboldEgg — Portado a 1.20.1.
- * * Una entidad tipo "Slime" que representa un huevo de la tribu en crecimiento.
- * * Al llegar a su edad máxima (HATCH_TICKS), eclosiona en un KoboldEntity.
- * * Si es atacado, se divide en huevos más pequeños (lógica de Slime).
+ * KoboldEgg — Portado a 1.20.1 / GeckoLib 4.
  */
-public class KoboldEgg extends Mob {
+public class KoboldEgg extends Mob implements GeoEntity {
 
-  public static int HATCH_TICKS = 8400; // 7 Minutos aproximadamente
+  public static int HATCH_TICKS = 8400;
 
   private static final EntityDataAccessor<Integer> DATA_SIZE =
           SynchedEntityData.defineId(KoboldEgg.class, EntityDataSerializers.INT);
   private static final EntityDataAccessor<Integer> DATA_AGE_TICKS =
           SynchedEntityData.defineId(KoboldEgg.class, EntityDataSerializers.INT);
+  private static final EntityDataAccessor<String> DATA_BODY_COLOR =
+          SynchedEntityData.defineId(KoboldEgg.class, EntityDataSerializers.STRING);
 
   public float squish;
   public float squishTarget;
   public float squishOld;
   private boolean wasOnGround;
+  private UUID tribeId;
 
   public static final List<KoboldEgg> clientEggs = new ArrayList<>();
+
+  // ── Caché de GeckoLib 4 ──────────────────────────────────────────────────
+  private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
 
   public KoboldEgg(EntityType<? extends KoboldEgg> type, Level level) {
     super(type, level);
     this.moveControl = new EggMoveControl(this);
-    if (level.isClientSide) clientEggs.add(this);
+    if (level.isClientSide()) clientEggs.add(this);
   }
 
   public static AttributeSupplier.Builder createAttributes() {
@@ -62,15 +70,23 @@ public class KoboldEgg extends Mob {
     super.defineSynchedData();
     this.entityData.define(DATA_SIZE, 1);
     this.entityData.define(DATA_AGE_TICKS, 0);
+    this.entityData.define(DATA_BODY_COLOR, "default");
   }
+
+  // ── Conectores para el Item ──────────────────────────────────────────────
+
+  public void setBodyColor(String color) { this.entityData.set(DATA_BODY_COLOR, color); }
+  public String getBodyColor() { return this.entityData.get(DATA_BODY_COLOR); }
+  public void setTribeId(UUID uuid) { this.tribeId = uuid; }
+  public UUID getTribeId() { return this.tribeId; }
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   @Override
   protected void registerGoals() {
     this.goalSelector.addGoal(1, new EggFloatGoal(this));
     this.goalSelector.addGoal(5, new EggHopGoal(this));
   }
-
-  // ── Gestión de Tamaño y Eclosión ──────────────────────────────────────────
 
   public void setSize(int size, boolean resetHealth) {
     this.entityData.set(DATA_SIZE, Mth.clamp(size, 1, 127));
@@ -81,9 +97,7 @@ public class KoboldEgg extends Mob {
     if (resetHealth) this.setHealth(this.getMaxHealth());
   }
 
-  public int getSize() {
-    return this.entityData.get(DATA_SIZE);
-  }
+  public int getSize() { return this.entityData.get(DATA_SIZE); }
 
   @Override
   public EntityDimensions getDimensions(Pose pose) {
@@ -96,14 +110,13 @@ public class KoboldEgg extends Mob {
     int age = this.entityData.get(DATA_AGE_TICKS) + 1;
     this.entityData.set(DATA_AGE_TICKS, age);
 
-    if (this.level().isClientSide) {
+    if (this.level().isClientSide()) {
       this.spawnGrowthParticles(age);
     } else if (age > HATCH_TICKS) {
       this.hatch();
       return;
     }
 
-    // Lógica de animación de "Squish" (rebote)
     this.squishOld = this.squish;
     this.squish += (this.squishTarget - this.squish) * 0.5F;
 
@@ -126,21 +139,21 @@ public class KoboldEgg extends Mob {
       this.level().addFreshEntity(kobold);
       this.playSound(SoundEvents.SLIME_SQUISH, 1.0F, 1.0F);
     }
-    this.remove(RemovalReason.DISCARDED);
+    this.discard();
   }
 
   private void handleLanding() {
     int size = this.getSize();
     for (int i = 0; i < size * 8; i++) {
-      float angle = this.random.nextFloat() * ((float)Math.PI * 2F);
-      float radius = this.random.nextFloat() * 0.5F + 0.5F;
-      this.level().addParticle(ParticleTypes.SLIME,
+      float angle = this.getRandom().nextFloat() * ((float)Math.PI * 2F);
+      float radius = this.getRandom().nextFloat() * 0.5F + 0.5F;
+      this.level().addParticle(ParticleTypes.ITEM_SLIME,
               this.getX() + Mth.sin(angle) * size * 0.5F * radius,
               this.getBoundingBox().minY,
               this.getZ() + Mth.cos(angle) * size * 0.5F * radius,
               0.0, 0.0, 0.0);
     }
-    this.playSound(this.getJumpSound(), this.getSoundVolume(), this.getSoundPitch());
+    this.playSound(this.getJumpSound(), this.getSoundVolume(), this.getVoicePitch());
     this.squishTarget = -0.5F;
   }
 
@@ -160,18 +173,23 @@ public class KoboldEgg extends Mob {
     }
   }
 
-  // ── Sonidos y Muerte ──────────────────────────────────────────────────────
-
   @Override
   public void die(DamageSource cause) {
     int size = this.getSize();
-    if (!this.level().isClientSide && size > 1 && this.getHealth() <= 0.0F) {
-      int splitCount = 2 + this.random.nextInt(3);
+    if (!this.level().isClientSide() && size > 1 && this.getHealth() <= 0.0F) {
+      int splitCount = 2 + this.getRandom().nextInt(3);
       for (int i = 0; i < splitCount; i++) {
-        KoboldEgg child = new KoboldEgg(ModEntities.KOBOLD_EGG.get(), this.level());
-        child.setSize(size / 2, true);
-        child.moveTo(this.getX(), this.getY() + 0.5, this.getZ(), this.random.nextFloat() * 360.0F, 0.0F);
-        this.level().addFreshEntity(child);
+
+        // ¡El truco de fábrica! En lugar de 'new', le pedimos al motor que cree una copia de nuestro propio tipo
+        KoboldEgg child = (KoboldEgg) this.getType().create(this.level());
+
+        if (child != null) {
+          child.setSize(size / 2, true);
+          child.setBodyColor(this.getBodyColor());
+          child.setTribeId(this.getTribeId());
+          child.moveTo(this.getX(), this.getY() + 0.5, this.getZ(), this.getRandom().nextFloat() * 360.0F, 0.0F);
+          this.level().addFreshEntity(child);
+        }
       }
     }
     super.die(cause);
@@ -188,6 +206,10 @@ public class KoboldEgg extends Mob {
     super.addAdditionalSaveData(nbt);
     nbt.putInt("Size", this.getSize() - 1);
     nbt.putInt("AgeTicks", this.entityData.get(DATA_AGE_TICKS));
+    nbt.putString("BodyColor", this.getBodyColor());
+    if (this.tribeId != null) {
+      nbt.putUUID("TribeID", this.tribeId);
+    }
   }
 
   @Override
@@ -195,9 +217,27 @@ public class KoboldEgg extends Mob {
     super.readAdditionalSaveData(nbt);
     this.setSize(nbt.getInt("Size") + 1, false);
     this.entityData.set(DATA_AGE_TICKS, nbt.getInt("AgeTicks"));
+    if (nbt.contains("BodyColor")) {
+      this.setBodyColor(nbt.getString("BodyColor"));
+    }
+    if (nbt.hasUUID("TribeID")) {
+      this.tribeId = nbt.getUUID("TribeID");
+    }
   }
 
-  // ── Clases Internas de IA (Basadas en Slime) ──────────────────────────────
+  // ── Implementación Obligatoria GeckoLib 4 ────────────────────────────────
+
+  @Override
+  public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
+    // Como el huevo se mueve por código, no necesitamos registrar controladores de animación
+  }
+
+  @Override
+  public AnimatableInstanceCache getAnimatableInstanceCache() {
+    return this.cache;
+  }
+
+  // ── Clases Internas de IA ───────────────────────────────────────────────
 
   static class EggMoveControl extends MoveControl {
     private float yRotTarget;
@@ -225,7 +265,7 @@ public class KoboldEgg extends Mob {
       if (this.mob.onGround()) {
         this.mob.setSpeed((float)(this.speedModifier * this.mob.getAttributeValue(Attributes.MOVEMENT_SPEED)));
         if (this.jumpDelay-- <= 0) {
-          this.jumpDelay = egg.random.nextInt(100) + 50;
+          this.jumpDelay = egg.getRandom().nextInt(100) + 50;
           this.egg.getJumpControl().jump();
         }
       }

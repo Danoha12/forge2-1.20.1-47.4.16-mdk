@@ -7,7 +7,7 @@ import net.minecraft.world.level.block.BaseFireBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
-
+import net.minecraft.server.level.ServerLevel;
 /**
  * SexmodFireBlock — Portado a 1.20.1.
  * * Bloque de fuego decorativo que no se propaga ni se apaga.
@@ -46,7 +46,17 @@ public class SexmodFireBlock extends BaseFireBlock {
      * se apague por la lluvia, o interactúe con el entorno. Se queda ahí para siempre.
      */
     @Override
-    public void randomTick(BlockState state, Level level, BlockPos pos, RandomSource random) {
+    public void randomTick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
         // Intencionalmente vacío — Fuego eterno y seguro.
+    }
+// ── Sensor de Combustión Obligatorio ─────────────────────────────────────
+
+    /**
+     * El chasis base (BaseFireBlock) exige saber si este fuego puede quemar otros bloques.
+     * Como es decorativo, lo puenteamos para que devuelva 'false' (no quema nada).
+     */
+    @Override
+    protected boolean canBurn(BlockState state) {
+        return false;
     }
 }

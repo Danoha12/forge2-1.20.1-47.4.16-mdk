@@ -1,5 +1,7 @@
 package com.trolmastercard.sexmod.inventory; // Ajusta a tu paquete
 
+import com.trolmastercard.sexmod.inventory.ClothingSlotType;
+import com.trolmastercard.sexmod.inventory.NpcEquipmentSlot;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;

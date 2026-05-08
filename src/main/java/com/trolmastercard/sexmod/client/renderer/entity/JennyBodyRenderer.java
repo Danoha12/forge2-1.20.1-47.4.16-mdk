@@ -2,6 +2,7 @@ package com.trolmastercard.sexmod.client.renderer.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.NpcInventoryEntity;
 import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.util.ItemRenderUtil;
@@ -20,12 +21,11 @@ import javax.annotation.Nullable;
  * * Maneja el renderizado de extremidades e ítems para el NPC Jenny.
  * Incluye física de cabello dinámica: el pelo reacciona al movimiento de la cabeza.
  */
-public class JennyBodyRenderer<T extends NpcInventoryEntity> extends NpcArmRenderer<T> {
-
+public class JennyBodyRenderer<T extends BaseNpcEntity> extends NpcArmRenderer<T> {
     private float headRotX = 0.0f;
 
-    public JennyBodyRenderer(GeoModel<T> model) {
-        super(model);
+    public JennyBodyRenderer(net.minecraft.client.renderer.entity.EntityRendererProvider.Context context, GeoModel<T> model) {
+        super(context, model);
     }
 
     // ── Transformación del Mundo (Escala NPC) ────────────────────────────────
@@ -39,21 +39,26 @@ public class JennyBodyRenderer<T extends NpcInventoryEntity> extends NpcArmRende
 
     // ── Resolución de Ítems Especiales ───────────────────────────────────────
 
-    @Override
-    @Nullable
-    protected ItemStack resolveHeldItem(@Nullable ItemStack defaultItem) {
-        if (entityRef == null) return defaultItem;
+    // ── Conexión de Armas Dinámicas (GeckoLib 4) ─────────────────────────────
 
-        AnimState state = entityRef.getAnimState();
-        // Durante el ataque o el uso del arco, forzamos el ítem del slot de arma
-        if (state == AnimState.BOW || state == AnimState.ATTACK) {
-            ItemStack weapon = entityRef.getWeaponSlotItem();
+    @Override
+    public void render(T entity, float entityYaw, float partialTick, PoseStack poseStack, net.minecraft.client.renderer.MultiBufferSource bufferSource, int packedLight) {
+        // 1. Interceptamos la señal antes de dibujar para ver en qué estado está Jenny
+        com.trolmastercard.sexmod.registry.AnimState state = entity.getAnimState();
+
+        // 2. Si está atacando o usando el arco, le forzamos el arma en la mano
+        if (state == com.trolmastercard.sexmod.registry.AnimState.BOW || state == com.trolmastercard.sexmod.registry.AnimState.ATTACK) {
+
+            // Usamos el adaptador (cast) a NpcInventoryEntity para que no marque error
+            ItemStack weapon = entity.getMainHandItem();
+
             if (weapon != null && !weapon.isEmpty()) {
-                entityRef.setItemInHand(InteractionHand.MAIN_HAND, weapon);
-                return weapon;
+                entity.setItemInHand(InteractionHand.MAIN_HAND, weapon);
             }
         }
-        return defaultItem;
+
+        // 3. Ya con el arma en la mano (si aplicaba), dejamos que el motor siga su curso
+        super.render(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
     }
 
     // ── Física del Cabello (onBoneProcess) ───────────────────────────────────
@@ -89,7 +94,7 @@ public class JennyBodyRenderer<T extends NpcInventoryEntity> extends NpcArmRende
     }
 
     private boolean isFrozen() {
-        return entityRef != null && entityRef.isInteractiveMode();
+        return entityRef != null && entityRef.isInteractiveMode;
     }
 
     // ── Transformaciones de Ítems ─────────────────────────────────────────────

@@ -38,20 +38,13 @@ public class WorldGenerationManager extends SavedData {
     private final List<GenerationRecord> records = new ArrayList<>();
     private final List<StructureEntry> entries = new ArrayList<>();
 
-    // 🚨 1.20.1: Requerido para crear o cargar SavedData
-    public static final SavedData.Factory<WorldGenerationManager> FACTORY = new SavedData.Factory<>(
-            WorldGenerationManager::new,
-            WorldGenerationManager::load,
-            null
-    );
-
     // ── Singleton ────────────────────────────────────────────────────────────
 
     public static WorldGenerationManager get(ServerLevel level) {
         if (instance == null) {
             // Se asegura de obtener los datos de la dimensión global (Overworld)
             instance = level.getServer().overworld().getDataStorage()
-                    .computeIfAbsent(FACTORY, DATA_NAME);
+                    .computeIfAbsent(WorldGenerationManager::load, WorldGenerationManager::new, DATA_NAME);
         }
         return instance;
     }

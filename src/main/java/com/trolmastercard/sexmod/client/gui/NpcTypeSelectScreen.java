@@ -14,7 +14,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
-
+import org.joml.Quaternionf;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -118,10 +118,23 @@ public class NpcTypeSelectScreen extends Screen {
      * Engañamos al sistema de "mirar al mouse" usando nuestra rotationAngle.
      */
     private void renderEntityInGui(GuiGraphics graphics, int x, int y, int scale, LivingEntity entity) {
-        // InventoryScreen.renderEntityInInventory requiere:
-        // (graphics, x, y, escala, mouseX_offset, mouseY_offset, entidad)
-        // Usamos la rotación acumulada para que gire constantemente
-        InventoryScreen.renderEntityInInventory(graphics, x, y, scale, rotationAngle, 0, entity);
+        // 1. Creamos la rotación base:
+        // - Invertimos en Z (PI) para que la entidad no salga de cabeza.
+        // - Aplicamos nuestra rotationAngle en el eje Y (convertida a radianes).
+        Quaternionf rotation = new Quaternionf()
+                .rotationZ((float) Math.PI)
+                .rotateY((float) Math.toRadians(rotationAngle));
+
+        // 2. Llamamos al método oficial.
+        // El parámetro nulo es para la orientación de la cámara (opcional).
+        InventoryScreen.renderEntityInInventory(
+                graphics,
+                x, y,
+                scale,
+                rotation,
+                null,
+                entity
+        );
     }
 
     @Override

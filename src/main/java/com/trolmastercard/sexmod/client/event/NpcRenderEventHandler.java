@@ -42,9 +42,8 @@ public class NpcRenderEventHandler {
 
         // Búsqueda segura del NPC vinculado al jugador
         for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
-            if (npc != null && !npc.isRemoved() && npc instanceof NpcStateAccessor state) {
-                if (playerUUID.equals(state.getSexPartnerUUID())) {
-                    bound = npc;
+            if (npc != null && !npc.isRemoved()) {
+                if (playerUUID.equals(((NpcStateAccessor) npc).getSexPartnerUUID())) {                    bound = npc;
                     break;
                 }
             }
@@ -90,11 +89,9 @@ public class NpcRenderEventHandler {
         if (player == null) return;
 
         for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
-            if (npc.isRemoved() || !(npc instanceof NpcStateAccessor state)) continue;
-
+            if (npc.isRemoved()) continue;
             if (npc.getAnimState() == AnimState.START_THROWING) {
-                boolean isOwner = player.getUUID().equals(state.getSexPartnerUUID());
-
+                boolean isOwner = player.getUUID().equals(((NpcStateAccessor) npc).getSexPartnerUUID());
                 // Forzamos el renderizado con un ángulo de rotación específico (-420.69)
                 // que el renderizador de la chica usa como señal interna.
                 npc.setInvisible(true); // Ocultamos la versión "normal" para que no se duplique
@@ -141,10 +138,10 @@ public class NpcRenderEventHandler {
 
     private boolean shouldHidePlayerContent(UUID playerUUID) {
         for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
-            if (npc instanceof NpcStateAccessor state) {
+            if (!npc.isRemoved()) {
                 AnimState anim = npc.getAnimState();
                 if ((anim == AnimState.PICK_UP || anim == AnimState.START_THROWING)
-                        && playerUUID.equals(state.getSexPartnerUUID())) {
+                        && playerUUID.equals(((NpcStateAccessor) npc).getSexPartnerUUID())) {
                     return true;
                 }
             }

@@ -60,16 +60,16 @@ public class ModEntityRegistry {
             () -> EntityType.Builder.of(MangleLieEntity::new, MobCategory.CREATURE)
                     .sized(0.6F, 1.95F).build("manglelie"));
 
-    public static final RegistryObject<EntityType<SlimeNpcEntity>> SLIME_NPC = ENTITIES.register("slime_npc",
-            () -> EntityType.Builder.of(SlimeNpcEntity::new, MobCategory.CREATURE)
+    public static final RegistryObject<EntityType<SlimeEntity>> SLIME_NPC = ENTITIES.register("slime_npc",
+            () -> EntityType.Builder.of(SlimeEntity::new, MobCategory.CREATURE)
                     .sized(2.04F, 2.04F).build("slime_npc"));
 
     // ── Avatares de Jugador (Morphs) ───────────────────────────────────────
     // Registramos las clases concretas de los avatares
 
-    public static final RegistryObject<EntityType<CatPlayerKobold>> PLAYER_CAT = ENTITIES.register("player_cat",
-            () -> EntityType.Builder.of(CatPlayerKobold::new, MobCategory.MISC)
-                    .sized(0.6F, 1.95F).build("player_cat"));
+    public static final RegistryObject<EntityType<LunaPlayerKobold>> PLAYER_CAT = ENTITIES.register("player_luna",
+            () -> EntityType.Builder.of(LunaPlayerKobold::new, MobCategory.MISC)
+                    .sized(0.6F, 1.95F).build("player_luna"));
 
     public static final RegistryObject<EntityType<JennyPlayerEntity>> PLAYER_JENNY = ENTITIES.register("player_jenny",
             () -> EntityType.Builder.of(JennyPlayerEntity::new, MobCategory.MISC)

@@ -4,13 +4,13 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.trolmastercard.sexmod.client.ClothRenderUtil;
 import com.trolmastercard.sexmod.client.model.entity.MangleLieModel;
+import com.trolmastercard.sexmod.client.renderer.BaseNpcRenderer;
 import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.GalathEntity;
 import com.trolmastercard.sexmod.entity.MangleLieEntity;
 import com.trolmastercard.sexmod.registry.NpcBoneRegistry;
 import com.trolmastercard.sexmod.util.MathUtil;
 import com.trolmastercard.sexmod.util.RgbaColor;
-import com.trolmastercard.sexmod.util.RgbColor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -41,9 +41,9 @@ public class MangleLieSexRenderer extends BaseNpcRenderer<MangleLieEntity> {
 
     // ── Constantes de Diseño ──────────────────────────────────────────────────
     static final RgbaColor SKIRT_TUBE_COLOR = new RgbaColor(115, 108, 188, 255);
-    static final RgbColor CLOTH_CURVE_1 = new RgbColor(0.05f, 0.04f, 0.0f);
-    static final RgbColor CLOTH_CURVE_2 = new RgbColor(0.0f, 0.065f, 0.0f);
-    static final RgbColor CLOTH_CURVE_3 = new RgbColor(0.0f, 0.03f, 0.03f);
+    static final RgbaColor CLOTH_CURVE_1 = new RgbaColor(13, 10, 0);   // 0.05f * 255
+    static final RgbaColor CLOTH_CURVE_2 = new RgbaColor(0, 16, 0);   // 0.065f * 255
+    static final RgbaColor CLOTH_CURVE_3 = new RgbaColor(0, 8, 8);    // 0.03f * 255
 
     static final RgbaColor SKIRT_COLOR_EVEN = new RgbaColor(63, 59, 150, 255);
     static final RgbaColor SKIRT_COLOR_ODD = new RgbaColor(79, 74, 188, 255);

@@ -1,6 +1,7 @@
 package com.trolmastercard.sexmod.entity.player;
 
 import com.trolmastercard.sexmod.client.model.EllieHandModel;
+import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;
 import com.trolmastercard.sexmod.network.ModNetwork;
 import com.trolmastercard.sexmod.network.packet.NpcActionQueuePacket;
 import com.trolmastercard.sexmod.registry.AnimState;

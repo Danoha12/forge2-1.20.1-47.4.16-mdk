@@ -1,31 +1,63 @@
 package com.trolmastercard.sexmod.util;
 
-import com.trolmastercard.sexmod.registry.YawPitch; // Asumiendo que esta clase existe
+import com.trolmastercard.sexmod.util.ModConstants; // Importante para el Subscriber
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.loading.FMLLoader;
 
 import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * ModUtil — Portado a 1.20.1.
- * * Utilidades generales para cálculos matemáticos, portapapeles y tareas programadas.
+ * Utilidades matemáticas y programador de tareas sincronizado con los ticks del juego.
  */
+@Mod.EventBusSubscriber(modid = ModConstants.MOD_ID)
 public final class ModUtil {
 
     private static final Random RNG = new Random();
-    private static final double TO_RAD = Math.PI / 180.0D;
+    private static final List<DelayedTask> TASKS = new CopyOnWriteArrayList<>();
 
     private ModUtil() {}
 
+    // ── Tareas Programadas (Sincronizadas con el Reloj de MC) ────────────────
+
+    /**
+     * Ejecuta una acción después de N ticks (20 ticks = 1 segundo).
+     * Es SEGURO para modificar el mundo, ya que corre en el hilo principal.
+     */
+    public static void scheduleDelayed(int ticks, Runnable action) {
+        TASKS.add(new DelayedTask(ticks, action));
+    }
+
+    @SubscribeEvent
+    public static void onTick(TickEvent.ClientTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) {
+            for (DelayedTask task : TASKS) {
+                task.delay--;
+                if (task.delay <= 0) {
+                    task.action.run();
+                    TASKS.remove(task);
+                }
+            }
+        }
+    }
+
+    private static class DelayedTask {
+        int delay;
+        Runnable action;
+        DelayedTask(int delay, Runnable action) { this.delay = delay; this.action = action; }
+    }
+
     // ── Ángulos y Rotaciones ─────────────────────────────────────────────────
 
-    /** Calcula la diferencia más corta entre dos ángulos en radianes. */
     public static float angleDiff(double a, double b) {
         a = (a + Math.PI * 2) % (Math.PI * 2);
         b = (b + Math.PI * 2) % (Math.PI * 2);
@@ -35,7 +67,6 @@ public final class ModUtil {
         return (float) d;
     }
 
-    /** Calcula Yaw y Pitch necesarios para mirar desde un punto a otro. */
     public static YawPitch lookAngles(Vec3 from, Vec3 to) {
         Vec3 dir = to.subtract(from).normalize();
         float yaw = (float) Math.atan2(dir.x, dir.z);
@@ -43,9 +74,8 @@ public final class ModUtil {
         return new YawPitch(yaw, pitch);
     }
 
-    // ── Utilidades de Sistema (Solo Cliente) ─────────────────────────────────
+    // ── Utilidades de Sistema ────────────────────────────────────────────────
 
-    /** Copia texto al portapapeles. Protegido para no crashear servidores dedicados. */
     public static void copyToClipboard(String text) {
         if (FMLLoader.getDist() == Dist.CLIENT) {
             try {
@@ -57,84 +87,17 @@ public final class ModUtil {
         }
     }
 
-    // ── Manipulación de Strings ─────────────────────────────────────────────
-
-    public static String capitalizeFirst(String s) {
-        if (s == null || s.isEmpty()) return s;
-        return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase();
-    }
-
-    // ── Matemáticas y Rangos ────────────────────────────────────────────────
+    // ── Matemáticas y Helpers ────────────────────────────────────────────────
 
     public static boolean inRange(double value, double min, double max) {
         return value >= min && value < max;
     }
 
-    /** Genera un número aleatorio con distribución triangular (preferencia a valores altos). */
-    public static int weightedRandom(int n) {
-        if (n <= 0) return n;
-        int total = (n * (n + 1)) / 2;
-        int pick = RNG.nextInt(total) + 1;
-        int cumul = 0;
-        for (int k = 1; k <= n; k++) {
-            cumul += k;
-            if (cumul >= pick) return k;
-        }
-        return n;
-    }
-
-    public static int randomSign() {
-        return RNG.nextBoolean() ? 1 : -1;
-    }
-
-    public static float clamp(float value, float min, float max) {
-        return Mth.clamp(value, min, max);
-    }
-
-    public static double clamp(double value, double min, double max) {
-        return Mth.clamp(value, min, max);
-    }
-
-    public static float randomFloat(float range, boolean signed) {
-        float v = RNG.nextFloat() * range;
-        if (signed && RNG.nextBoolean()) v = -v;
-        return v;
-    }
-
-    /** Acerca un valor actual hacia un objetivo por pasos (útil para suavizar animaciones). */
     public static float moveTowards(float current, float target, float step) {
         if (Math.abs(current - target) <= step) return target;
-        if (Math.abs(current) < Math.abs(target)) {
-            return target > 0 ? target - step : target + step;
-        }
-        return current > 0 ? current - step : current + step;
+        return current < target ? current + step : current - step;
     }
 
-    public static int roundToInt(double d) {
-        return Mth.floor(d + 0.5D);
-    }
-
-    // ── Tareas Programadas ──────────────────────────────────────────────────
-
-    /** * Ejecuta una tarea después de X milisegundos.
-     * ¡OJO!: Si la tarea toca el mundo de MC, debe sincronizarse con el hilo principal.
-     */
-    public static void scheduleTask(int millis, Runnable task) {
-        String id = UUID.randomUUID().toString().substring(0, 8);
-        String side = FMLLoader.getDist().isClient() ? "Client" : "Server";
-
-        Thread t = new Thread(() -> {
-            try {
-                Thread.sleep(millis);
-                task.run();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }, "SexMod-Task-" + side + "-" + id);
-
-        t.setDaemon(true);
-        t.start();
-    }
+    public static float clamp(float value, float min, float max) { return Mth.clamp(value, min, max); }
+    public static double clamp(double value, double min, double max) { return Mth.clamp(value, min, max); }
 }

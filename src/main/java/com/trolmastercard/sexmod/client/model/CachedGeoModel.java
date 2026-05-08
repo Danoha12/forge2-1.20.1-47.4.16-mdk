@@ -48,10 +48,11 @@ public abstract class CachedGeoModel<T extends BaseNpcEntity & GeoAnimatable> ex
 
         // Limpiamos el caché y registramos los huesos del nuevo modelo horneado
         var processor = getAnimationProcessor();
-        if (processor instanceof CachedAnimationProcessor) {
-            processor.clearBones();
+        // Le agregamos un nombre ("cachedProcessor") al lado para que Java haga el adaptador automático
+        if (processor instanceof CachedAnimationProcessor cachedProcessor) {
+            cachedProcessor.clearBones();
             for (var bone : model.topLevelBones()) {
-                processor.registerBone(bone);
+                cachedProcessor.registerBone(bone);
             }
         }
 

@@ -67,14 +67,7 @@ public class SpearModel<T extends Entity> extends EntityModel<T> implements IBon
     // ── IBoneAccessor ────────────────────────────────────────────────────────
 
     @Override
-    public void setBoneRotation(ModelPart part, float x, float y, float z) {
-        part.xRot = x;
-        part.yRot = y;
-        part.zRot = z;
-    }
-
-    @Override
-    public ModelPart getRootBone() {
+    public ModelPart getBoneRoot() {
         return this.spearPart;
     }
 }

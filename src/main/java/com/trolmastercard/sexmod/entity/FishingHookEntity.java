@@ -61,7 +61,7 @@ public class FishingHookEntity extends Entity {
     }
 
     public FishingHookEntity(Level level, LunaEntity owner, double speed) {
-        this(ModEntityRegistry.FISHING_HOOK.get(), level);
+        this(ModEntityRegistry.LUNA_HOOK.get(), level);
         this.setPos(owner.getX(), owner.getEyeY(), owner.getZ());
         owner.setFishingHook(this);
         this.entityData.set(DATA_OWNER_UUID, Optional.of(owner.getUUID()));
@@ -203,12 +203,26 @@ public class FishingHookEntity extends Entity {
     public LunaEntity getOwner() {
         Optional<UUID> uuid = entityData.get(DATA_OWNER_UUID);
         if (uuid.isPresent()) {
-            Entity e = this.level().isClientSide ? BaseNpcEntity.getClientEntity(uuid.get()) : BaseNpcEntity.getServerEntity(uuid.get());
+            UUID ownerId = uuid.get();
+            Entity e = null;
+
+            if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+                // 1. Si estamos en el Servidor, usamos el radar nativo de 1.20.1
+                e = serverLevel.getEntity(ownerId);
+            } else {
+                // 2. Si estamos en el Cliente, buscamos en tu lista de entidades activas
+                for (BaseNpcEntity npc : BaseNpcEntity.getAllActive()) {
+                    if (npc.getUUID().equals(ownerId)) {
+                        e = npc;
+                        break;
+                    }
+                }
+            }
+
             return e instanceof LunaEntity ? (LunaEntity) e : null;
         }
         return pendingOwner;
     }
-
     private void launch(double speed) {
         // Implementación simplificada del lanzamiento basado en la mirada de Luna
         this.setDeltaMovement(new Vec3(0, 0.5 * speed, 0.5 * speed));

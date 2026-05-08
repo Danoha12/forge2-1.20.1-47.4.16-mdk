@@ -1,5 +1,6 @@
 package com.trolmastercard.sexmod.entity;
 
+import com.trolmastercard.sexmod.client.model.NpcHandModel;
 import com.trolmastercard.sexmod.client.model.entity.GoblinHandModel;
 import com.trolmastercard.sexmod.registry.AnimState;
 import net.minecraft.client.Minecraft;

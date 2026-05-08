@@ -1,4 +1,4 @@
-package com.trolmastercard.sexmod.network.packet; // Ajusta al paquete correcto
+package com.trolmastercard.sexmod.network.packet;
 
 import com.trolmastercard.sexmod.data.GalathOwnershipData;
 import net.minecraft.network.FriendlyByteBuf;
@@ -11,7 +11,7 @@ import java.util.function.Supplier;
 /**
  * OwnershipSyncPacket — Portado a 1.20.1.
  * * SERVIDOR -> CLIENTE.
- * * Informa al cliente si el jugador local es el dueño de un NPC (Galath).
+ * * Sincroniza el estado de posesión de Galath para la moneda y la UI.
  */
 public class OwnershipSyncPacket {
 
@@ -21,7 +21,7 @@ public class OwnershipSyncPacket {
         this.isOwner = isOwner;
     }
 
-    // ── Codec (Estandarizado a estático) ─────────────────────────────────────
+    // ── Codec ────────────────────────────────────────────────────────────────
 
     public static void encode(OwnershipSyncPacket msg, FriendlyByteBuf buf) {
         buf.writeBoolean(msg.isOwner);
@@ -36,17 +36,17 @@ public class OwnershipSyncPacket {
     public static void handle(OwnershipSyncPacket msg, Supplier<NetworkEvent.Context> ctxSupplier) {
         NetworkEvent.Context ctx = ctxSupplier.get();
 
-        if (ctx.getDirection().getReceptionSide().isClient()) {
-            ctx.enqueueWork(() -> {
-                // 🛡️ ESCUDO DE SERVIDOR DEDICADO:
-                // Aísla completamente la ejecución del código de Cliente.
-                DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
-                    GalathOwnershipData.setLocalPlayerIsOwner(msg.isOwner);
-                });
+        // Ejecutamos en el hilo principal del cliente
+        ctx.enqueueWork(() -> {
+            // Usamos DistExecutor para evitar que el servidor busque clases de cliente
+            DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
+                // REPARACIÓN: Accedemos a msg.isOwner directamente
+                GalathOwnershipData.clientHasGalath = msg.isOwner;
+
+                // Opcional: Log para debuggear en la consola del cliente
+                // System.out.println("[SexMod] Sincronización de Galath: " + msg.isOwner);
             });
-        } else {
-            System.out.println("[SexMod] Error: OwnershipSyncPacket recibido en el servidor.");
-        }
+        });
 
         ctx.setPacketHandled(true);
     }

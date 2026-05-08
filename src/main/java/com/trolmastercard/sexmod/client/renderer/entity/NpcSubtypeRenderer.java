@@ -1,5 +1,6 @@
 package com.trolmastercard.sexmod.client.renderer.entity;
 
+import com.trolmastercard.sexmod.client.renderer.BaseNpcRenderer;
 import com.trolmastercard.sexmod.entity.NpcSubtypeEntity;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import software.bernie.geckolib.model.GeoModel;

@@ -1,7 +1,7 @@
 package com.trolmastercard.sexmod.network.packet; // Ajusta a tu paquete de red
 
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
-import com.trolmastercard.sexmod.entity.TickableCallback; // Asumo que esto existe
+import com.trolmastercard.sexmod.util.TickableCallback; // Asumo que esto existe
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.network.NetworkEvent;
 

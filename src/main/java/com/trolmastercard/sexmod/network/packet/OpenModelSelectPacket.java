@@ -1,6 +1,6 @@
 package com.trolmastercard.sexmod.network.packet; // Ajusta a tu paquete de red
 
-import com.trolmastercard.sexmod.client.screen.NpcTypeSelectScreen;
+import com.trolmastercard.sexmod.client.gui.NpcTypeSelectScreen;
 import com.trolmastercard.sexmod.entity.NpcType;
 import com.trolmastercard.sexmod.network.ModNetwork;
 import net.minecraft.client.Minecraft;

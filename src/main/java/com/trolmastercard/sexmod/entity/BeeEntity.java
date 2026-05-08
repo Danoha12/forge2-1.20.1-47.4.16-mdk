@@ -36,6 +36,8 @@ import software.bernie.geckolib.core.animation.RawAnimation;
 import software.bernie.geckolib.core.object.PlayState;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
+import java.util.UUID;
+
 /**
  * BeeEntity — Portado a 1.20.1 / GeckoLib 4 y enmascarado (SFW).
  *
@@ -135,7 +137,7 @@ public class BeeEntity extends NpcInventoryBase implements GeoEntity {
 
         // updateAnimStateName(); // Descomentar si existe en la clase base
 
-        if (getAnimState() == AnimState.CITIZEN_FINISH) {
+        if (getAnimState() == AnimState.CITIZEN_CUM) {
             breedCounter = Math.max(1, breedCounter);
         }
 
@@ -146,8 +148,8 @@ public class BeeEntity extends NpcInventoryBase implements GeoEntity {
     @Override
     public void setAnimStateFiltered(AnimState state) {
         // Prevenir interrupción durante la animación final
-        if (getAnimState() == AnimState.CITIZEN_FINISH) {
-            if (state == AnimState.CITIZEN_FAST || state == AnimState.RIDE_SLOW) return;
+        if (getAnimState() == AnimState.CITIZEN_CUM) {
+            if (state == AnimState.CITIZEN_FAST || state == AnimState.COWGIRLSLOW) return;
         }
         super.setAnimStateFiltered(state);
     }
@@ -284,8 +286,8 @@ public class BeeEntity extends NpcInventoryBase implements GeoEntity {
     // @Override // Descomentar si están en BaseNpcEntity
     protected AnimState getCumTransition(AnimState current) {
         return switch (current) {
-            case CITIZEN_FAST -> AnimState.CITIZEN_FINISH;
-            case CITIZEN_SLOW -> AnimState.CITIZEN_FINISH;
+            case CITIZEN_FAST -> AnimState.CITIZEN_CUM;
+            case CITIZEN_SLOW -> AnimState.CITIZEN_CUM;
             default -> null;
         };
     }
@@ -308,6 +310,16 @@ public class BeeEntity extends NpcInventoryBase implements GeoEntity {
         // inventoryHandler.deserializeNBT(tag.getCompound("inventory")); // Descomentar cuando NpcInventoryBase esté listo
     }
 
+    @Override
+    public Vec3 getBonePosition(String boneName) {
+        return null;
+    }
+
+    @Override
+    public void triggerAction(String action, UUID playerId) {
+
+    }
+
     // ── GeckoLib 4 ───────────────────────────────────────────────────────────
 
     @Override
@@ -317,18 +329,18 @@ public class BeeEntity extends NpcInventoryBase implements GeoEntity {
     }
 
     private PlayState movementPredicate(AnimationState<BeeEntity> state) {
-        if (this.level().isClientSide() && this.level().getClass().getSimpleName().contains("Fake"))
-            return PlayState.STOP;
+        // En 1.20.1, para detectar si es un "FakeWorld" (Preview de inventario)
+        if (this.level().isClientSide() && this.level().getClass().getSimpleName().contains("ClientLevel")) {
+            // Lógica para no procesar IAs en menús si fuera necesario
+        }
 
         AnimState anim = getAnimState();
-        if (anim != AnimState.NULL) {
+        if (anim != AnimState.NULL && anim != null) {
             return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bee.null"));
-        } else {
-            // boolean hasChest = this.entityData.get(DATA_HAS_CHEST);
-            boolean hasChest = false;
-            return state.setAndContinue(RawAnimation.begin()
-                    .thenLoop("animation.bee." + (hasChest ? "idle_has_chest" : "idle")));
         }
+
+        // Uso de 'this.random' en lugar de 'getRandom()' si fuera necesario
+        return state.setAndContinue(RawAnimation.begin().thenLoop("animation.bee.idle"));
     }
 
     private PlayState actionPredicate(AnimationState<BeeEntity> state) {
@@ -337,7 +349,7 @@ public class BeeEntity extends NpcInventoryBase implements GeoEntity {
             case CITIZEN_START -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bee.sex_start"));
             case CITIZEN_SLOW  -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bee.sex_slow"));
             case CITIZEN_FAST  -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bee.sex_fast"));
-            case CITIZEN_FINISH-> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bee.sex_cum"));
+            case CITIZEN_CUM-> state.setAndContinue(RawAnimation.begin().thenPlay("animation.bee.sex_cum"));
             case THROW_PEARL   -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.bee.throw_pearl"));
             default            -> PlayState.CONTINUE;
         };

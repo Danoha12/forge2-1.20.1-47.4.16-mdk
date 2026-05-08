@@ -74,8 +74,12 @@ public class SpearGripBoneModel extends EntityModel<Entity> implements IBoneAcce
         bone.zRot = rz;
     }
 
-    @Override
     public ModelPart getBone() {
         return this.grip;
+    }
+
+    @Override
+    public ModelPart getBoneRoot() {
+        return this.root;
     }
 }

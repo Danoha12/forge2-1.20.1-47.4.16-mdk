@@ -1,5 +1,6 @@
 package com.trolmastercard.sexmod.event; // Sugerido mover a un paquete de eventos
 
+import com.trolmastercard.sexmod.client.handler.ClientStateManager;
 import com.trolmastercard.sexmod.data.GalathOwnershipData;
 import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
@@ -101,6 +102,7 @@ public class PlayerConnectionHandler {
   public void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
     Player player = event.getEntity();
     List<BaseNpcEntity> allNpcs = BaseNpcEntity.getAllActive();
+    ClientStateManager.setCanMove(true);
 
     for (BaseNpcEntity npc : allNpcs) {
       boolean ownedByPlayer = player.getUUID().equals(npc.getMasterUUID()) || player.getUUID().equals(npc.getGameUUID());

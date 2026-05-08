@@ -1,5 +1,6 @@
 package com.trolmastercard.sexmod.entity;
 
+import com.trolmastercard.sexmod.registry.ModEntities;
 import com.trolmastercard.sexmod.tribe.TribeManager;
 import com.trolmastercard.sexmod.util.KoboldColorVariant; // Asumiendo este nombre
 import net.minecraft.ChatFormatting;
@@ -69,7 +70,7 @@ public class KoboldEggEntity extends LivingEntity implements GeoEntity {
     // ── Lógica de Eclosión ────────────────────────────────────────────────────
 
     private void hatch() {
-        // Partículas de éxito (Poof)
+        // Lógica de partículas (Lado Cliente)
         if (this.level().isClientSide()) {
             for (int i = 0; i < 20; i++) {
                 this.level().addParticle(ParticleTypes.POOF, this.getX(), this.getY() + 0.3, this.getZ(),
@@ -78,30 +79,31 @@ public class KoboldEggEntity extends LivingEntity implements GeoEntity {
             return;
         }
 
+        // Lógica de Servidor
         if (tribeId == null) tribeId = UUID.randomUUID();
 
-        // Crear al nuevo miembro de la tribu
-        KoboldEntity kobold = new KoboldEntity(this.level()); // Asumiendo constructor con level
+        // 🚨 REPARADO: Constructor correcto para 1.20.1
+        KoboldEntity kobold = new KoboldEntity(ModEntities.KOBOLD.get(), this.level());
         kobold.moveTo(this.getX(), this.getY(), this.getZ(), this.getYRot(), 0.0F);
 
-        // Heredar propiedades de la tribu mediante el TribeManager
+        // 🚨 REPARADO: Ahora el TribeManager encontrará el método
         TribeManager.initializeNewMember(tribeId, kobold);
 
         this.level().addFreshEntity(kobold);
         this.level().playSound(null, this.blockPosition(), SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS, 0.5F, 1.2F);
 
         this.notifyTribeOwner(kobold);
-        this.discard();
+        this.discard(); // Adiós al huevo
     }
 
     private void notifyTribeOwner(KoboldEntity kobold) {
-        Player owner = kobold.getTribeOwner();
+        Player owner = kobold.getTribeOwner(); // 👈 Ahora esto ya funciona
+
         if (owner instanceof ServerPlayer sp) {
             Component msg = Component.translatable("mod.tribe.new_member", kobold.getDisplayName())
                     .withStyle(ChatFormatting.GOLD);
             sp.sendSystemMessage(msg);
 
-            // Sonidos de recompensa
             sp.playNotifySound(SoundEvents.PLAYER_LEVELUP, SoundSource.NEUTRAL, 0.7F, 1.0F);
         }
     }

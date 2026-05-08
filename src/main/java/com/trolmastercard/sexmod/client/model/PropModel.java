@@ -59,7 +59,9 @@ public class PropModel<T extends Entity> extends EntityModel<T> implements IBone
     // ── IBoneAccessor ────────────────────────────────────────────────────────
 
     @Override
-    public ModelPart getRootBone() {
+    public ModelPart getBoneRoot() {
+        // Revisa arriba en tu código cómo se llama la variable principal.
+        // Puede ser this.root, this.base, this.mainPart...
         return this.propPart;
     }
 }

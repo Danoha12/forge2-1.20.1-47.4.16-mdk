@@ -1,5 +1,6 @@
 package com.trolmastercard.sexmod.entity;
 
+import com.trolmastercard.sexmod.client.model.NpcHandModel;
 import com.trolmastercard.sexmod.client.model.entity.SlimeHandModel;
 import com.trolmastercard.sexmod.network.ModNetwork;
 import com.trolmastercard.sexmod.network.packet.CameraControlPacket;

@@ -1,22 +1,23 @@
 package com.trolmastercard.sexmod.entity;
 
-import com.trolmastercard.sexmod.client.gui.InteractionMeterOverlay;
 import com.trolmastercard.sexmod.client.gui.TransitionScreen;
 import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.registry.ModSounds;
-import net.minecraft.client.Minecraft;
+import com.trolmastercard.sexmod.network.ModNetwork;
+import com.trolmastercard.sexmod.network.packet.OpenNpcInventoryPacket;
+import com.trolmastercard.sexmod.network.packet.SendCompanionHomePacket;
+import com.trolmastercard.sexmod.network.packet.SetNpcHomePacket;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.phys.Vec3;
@@ -30,13 +31,12 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 
 import java.util.UUID;
 
-/**
- * LunaEntity — Portado a 1.20.1.
- * * Personaje tipo gato con IA de búsqueda de camas y sistema de regalos (Salmón).
- */
-public class LunaEntity extends BaseNpcEntity implements GeoEntity {
+public class LunaEntity extends NpcInventoryBase implements GeoEntity {
 
+    // -- DataAccessors porteados --
     public static final EntityDataAccessor<Float> ANIM_TIMER = SynchedEntityData.defineId(LunaEntity.class, EntityDataSerializers.FLOAT);
+    public static final EntityDataAccessor<ItemStack> ENCHANT_ITEM = SynchedEntityData.defineId(LunaEntity.class, EntityDataSerializers.ITEM_STACK);
+    public static final EntityDataAccessor<Boolean> IS_ON_BACK = SynchedEntityData.defineId(LunaEntity.class, EntityDataSerializers.BOOLEAN);
     public static final EntityDataAccessor<ItemStack> PAYMENT_ITEM = SynchedEntityData.defineId(LunaEntity.class, EntityDataSerializers.ITEM_STACK);
 
     private int sitDownTimer = 0;
@@ -51,44 +51,63 @@ public class LunaEntity extends BaseNpcEntity implements GeoEntity {
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(ANIM_TIMER, 0.0F);
+        this.entityData.define(ENCHANT_ITEM, ItemStack.EMPTY);
+        this.entityData.define(IS_ON_BACK, false);
         this.entityData.define(PAYMENT_ITEM, ItemStack.EMPTY);
     }
 
     @Override
     public String getNpcName() { return "Luna"; }
 
-    @Override
-    public float getEyeHeight(Pose pose) { return 1.34F; }
+    // -- Lógica de Encantamientos (Visual) --
+    private void applyEnchantmentsToVisual(ItemStack visualItem) {
+        ItemStack enchSrc = this.entityData.get(ENCHANT_ITEM);
+        if (!enchSrc.isEmpty()) {
+            var enchants = EnchantmentHelper.getEnchantments(enchSrc);
+            EnchantmentHelper.setEnchantments(enchants, visualItem);
+        }
+    }
 
-    // ── Interacción con Salmón y Menús ───────────────────────────────────────
-
+    // -- Interacción Porteada --
     @Override
     public InteractionResult mobInteract(Player player, InteractionHand hand) {
         ItemStack held = player.getItemInHand(hand);
 
-        // Si le das salmón, Luna se pone feliz y busca una cama
         if (held.is(Items.SALMON)) {
             if (!this.level().isClientSide()) {
                 held.shrink(1);
-                this.playSound(ModSounds.GIRLS_LUNA_OWO.get(), 1.0F, 1.0F);
+                this.playSound(ModSounds.GIRLS_LUNA_OWO[0].get(), 1.0F, 1.0F);
                 findAndGoToBed();
             }
-            return InteractionResult.SUCCESS;
+            return InteractionResult.sidedSuccess(this.level().isClientSide());
         }
 
-        if (this.level().isClientSide()) {
-            // Abrir menú de acciones (Mapear tus botones de la UI aquí)
-            player.displayClientMessage(Component.literal("Luna: ¿Quieres jugar conmigo? nya~"), true);
-        }
-
-        return InteractionResult.SUCCESS;
+        // Si no tiene salmón, abrir menú de acciones (Lógica de tu Screen)
+        return super.mobInteract(player, hand);
     }
 
-    // ── Lógica de "Wait Cat" (Acecho de Gato) ────────────────────────────────
+    // -- Búsqueda de Camas Inteligente (Tu lógica de offsets) --
+    private void findAndGoToBed() {
+        BlockPos origin = this.blockPosition();
+        BlockPos targetBed = null;
+
+        // Buscamos cama en rango de 8 bloques
+        for (BlockPos pos : BlockPos.betweenClosed(origin.offset(-8, -2, -8), origin.offset(8, 2, 8))) {
+            if (this.level().getBlockState(pos).getBlock() instanceof BedBlock) {
+                targetBed = pos.immutable();
+                break;
+            }
+        }
+
+        if (targetBed != null) {
+            this.getNavigation().moveTo(targetBed.getX(), targetBed.getY(), targetBed.getZ(), 0.5D);
+            this.approachingBed = true;
+        }
+    }
 
     @Override
-    public void tick() {
-        super.tick();
+    public void aiStep() {
+        super.aiStep();
         if (!this.level().isClientSide()) {
             tickWaitCatLogic();
         }
@@ -100,81 +119,74 @@ public class LunaEntity extends BaseNpcEntity implements GeoEntity {
             return;
         }
 
-        Player nearest = this.level().getNearestPlayer(this, 2.0D);
-        if (nearest != null && this.distanceTo(nearest) < 1.5F) {
+        Player nearest = this.level().getNearestPlayer(this, 1.5D);
+        if (nearest != null) {
             sitDownTimer++;
-
-            // Si el jugador se queda cerca 25 ticks (1.2 segundos), Luna salta
             if (sitDownTimer >= 25) {
-                this.setPartnerUUID(nearest.getUUID());
-                this.setAnimStateFiltered(AnimState.CAT_SITTING_INTRO);
+                this.setSexPartnerUUID(nearest.getUUID());
+                this.setAnimStateFiltered(AnimState.COWGIRL_SITTING_INTRO);
                 sitDownTimer = 0;
             }
         }
     }
 
-    // ── Búsqueda de Camas ─────────────────────────────────────────────────────
-
-    private void findAndGoToBed() {
-        BlockPos bedPos = findNearestBed(this.blockPosition());
-        if (bedPos == null) {
-            this.sendSystemMessage(Component.literal("<Luna> No hay camas cerca nya~"));
-            return;
-        }
-        this.getNavigation().moveTo(bedPos.getX(), bedPos.getY(), bedPos.getZ(), 0.5D);
-        this.approachingBed = true;
-    }
-
-    private BlockPos findNearestBed(BlockPos origin) {
-        for (BlockPos pos : BlockPos.betweenClosed(origin.offset(-8, -2, -8), origin.offset(8, 2, 8))) {
-            if (this.level().getBlockState(pos).getBlock() instanceof BedBlock) return pos.immutable();
-        }
-        return null;
-    }
-
     @Override
     public void triggerAction(String action, UUID playerId) {
         switch (action) {
-            case "tickle" -> setAnimStateFiltered(AnimState.TICKLE_INTRO);
-            case "headpat" -> setAnimStateFiltered(AnimState.HEAD_PAT);
-            case "wait" -> setAnimStateFiltered(AnimState.WAIT_CAT);
+            case "action.names.sex" -> setAnimStateFiltered(AnimState.WAIT_CAT);
+            case "action.names.touchboobs" -> setAnimStateFiltered(AnimState.TOUCH_BOOBS_INTRO);
+            case "action.names.headpat" -> setAnimStateFiltered(AnimState.HEAD_PAT);
+            case "action.names.followme" -> setMaster(playerId.toString());
+            case "action.names.stopfollowme" -> stopFollow();
+            case "action.names.equipment" -> ModNetwork.CHANNEL.sendToServer(new OpenNpcInventoryPacket(getNpcUUID()));
         }
     }
 
-    // ── GeckoLib 4: Controladores de Luna ────────────────────────────────────
-
+    // -- GeckoLib 4 Controllers --
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar registrar) {
-        // Controlador de ojos (Parpadeo felino)
-        registrar.add(new AnimationController<>(this, "eyes", 5, state ->
-                state.setAndContinue(RawAnimation.begin().thenLoop("animation.cat.blink"))
-        ));
-
-        // Movimiento base
         registrar.add(new AnimationController<>(this, "movement", 5, state -> {
             if (getAnimState() != AnimState.NULL) return PlayState.STOP;
-            if (state.isMoving()) return state.setAndContinue(RawAnimation.begin().thenLoop("animation.cat.walk"));
-            return state.setAndContinue(RawAnimation.begin().thenLoop("animation.cat.idle"));
+            String anim = state.isMoving() ? "animation.cat.walk" : "animation.cat.idle";
+            return state.setAndContinue(RawAnimation.begin().thenLoop(anim));
         }));
 
-        // Escenas y Acciones
         registrar.add(new AnimationController<>(this, "action", 0, state -> {
             AnimState as = getAnimState();
-            if (as == AnimState.NULL) return PlayState.STOP;
+            if (as == AnimState.NULL || as == null) return PlayState.STOP;
 
-            String name = switch (as) {
-                case TOUCH_BOOBS_INTRO -> "animation.cat.touch_boobs_intro";
-                case TOUCH_BOOBS_SLOW  -> "animation.cat.touch_boobs_slow";
-                case HEAD_PAT          -> "animation.cat.head_pat";
-                case WAIT_CAT          -> "animation.cat.wait";
-                case COWGIRL_SITTING_INTRO -> "animation.cat.sitting_intro";
-                case COWGIRL_SITTING_SLOW  -> "animation.cat.sitting_slow";
-                default                -> "animation.cat.null";
-            };
+            // Mapeo dinámico de animaciones con prefijo "animation.cat."
+            String name = "animation.cat." + as.name().toLowerCase();
             return state.setAndContinue(RawAnimation.begin().thenLoop(name));
         }));
     }
 
-    @Override public Vec3 getBonePosition(String boneName) { return this.position().add(0, 0.7, 0); }
+    @Override public Vec3 getBonePosition(String boneName) { return this.position(); }
     @Override public AnimatableInstanceCache getAnimatableInstanceCache() { return animCache; }
+// ── SISTEMA DE PESCA (Conexión con el Anzuelo) ───────────────────────────
+
+    // Variable para guardar el anzuelo que Luna tiene lanzado
+    private com.trolmastercard.sexmod.entity.FishingHookEntity activeHook;
+
+    /**
+     * 1. Conecta o desconecta el anzuelo actual.
+     */
+    public void setFishingHook(com.trolmastercard.sexmod.entity.FishingHookEntity hook) {
+        this.activeHook = hook;
+    }
+
+    /**
+     * 2. El anzuelo llama a este método cuando toca el suelo o el agua.
+     */
+    public void onFishingHookLanded() {
+        // 🚨 Aquí va tu lógica si quieres que Luna reaccione o cambie de animación
+    }
+
+    /**
+     * 3. El anzuelo llama a este método cuando atrapa un botín (Loot).
+     */
+    public void receiveItem(net.minecraft.world.item.ItemStack item) {
+        // 🚨 Aquí decides qué hace Luna con el ítem (ej. tirarlo al piso para el jugador)
+        this.spawnAtLocation(item);
+    }
 }

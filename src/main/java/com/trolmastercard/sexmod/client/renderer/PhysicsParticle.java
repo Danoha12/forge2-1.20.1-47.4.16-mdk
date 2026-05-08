@@ -89,7 +89,7 @@ public class PhysicsParticle {
 
         // Ajustamos la posición ligeramente para que no quede "dentro" del bloque
         // y evitar el z-fighting (parpadeo de textura)
-        Direction side = getCollisionDirection(BlockPos.containing(prevPos), hitBlock);
+        net.minecraft.core.Direction side = getCollisionDirection(BlockPos.containing(prevPos), hitBlock);
         this.pos = new Vec3(
                 hitBlock.getX() + 0.5 + (side.getStepX() * (0.5 + SURFACE_OFFSET)),
                 hitBlock.getY() + 0.5 + (side.getStepY() * (0.5 + SURFACE_OFFSET)),
@@ -131,5 +131,45 @@ public class PhysicsParticle {
             else { err2 += dx; y += sy; }
         }
         return path;
+    }
+// ── Getters para el Renderizador de Líneas ────────────────────────────────
+
+    public double getX() { return this.pos.x; }
+    public double getY() { return this.pos.y; }
+    public double getZ() { return this.pos.z; }
+
+    public double getXo() { return this.prevPos.x; }
+    public double getYo() { return this.prevPos.y; }
+    public double getZo() { return this.prevPos.z; }
+    public void render(com.mojang.blaze3d.vertex.PoseStack poseStack, com.mojang.blaze3d.vertex.BufferBuilder builder, float partialTick, Vec3 cameraPos) {
+        // 1. Interpolación (Lerp): Para que el movimiento sea suave y no se vea a saltos
+        double renderX = net.minecraft.util.Mth.lerp(partialTick, prevPos.x, pos.x) - cameraPos.x;
+        double renderY = net.minecraft.util.Mth.lerp(partialTick, prevPos.y, pos.y) - cameraPos.y;
+        double renderZ = net.minecraft.util.Mth.lerp(partialTick, prevPos.z, pos.z) - cameraPos.z;
+
+        poseStack.pushPose();
+        poseStack.translate(renderX, renderY, renderZ);
+
+        // 2. Hacer que el cuadrado siempre mire al jugador (Billboard)
+        // Usamos la rotación de la cámara que ya viene en el sistema de renderizado
+        poseStack.mulPose(net.minecraft.client.Minecraft.getInstance().getEntityRenderDispatcher().cameraOrientation());
+
+        // 3. Tamaño de la partícula (puedes ajustar el 0.05F para hacerla más grande o chica)
+        float s = 0.05F;
+        org.joml.Matrix4f matrix = poseStack.last().pose();
+
+        // 4. Dibujar los 4 vértices del Quad
+        builder.vertex(matrix, -s, -s, 0).uv(0, 1).endVertex();
+        builder.vertex(matrix,  s, -s, 0).uv(1, 1).endVertex();
+        builder.vertex(matrix,  s,  s, 0).uv(1, 0).endVertex();
+        builder.vertex(matrix, -s,  s, 0).uv(0, 0).endVertex();
+
+        poseStack.popPose();
+    }
+
+    // 🚨 PIEZA EXTRA: El renderer te pedía un "Owner" para limpiar partículas,
+    // vamos a agregarlo para que no te dé error el removeForNpc
+    public net.minecraft.world.entity.Entity getOwner() {
+        return null; // Por ahora devolvemos null, o puedes pasarle el NPC en el constructor
     }
 }

@@ -56,7 +56,7 @@ public class GoblinEntityRenderer extends GoblinBodyRenderer {
     @Override
     protected NpcSkinTexture getSkinTexture(GoblinEntity entity) {
         try {
-            if (entity.level() instanceof FakeWorld) return null;
+            if (entity.level() == null) return null;
             if (entity.getCarrierUUID() != null) return null;
         } catch (RuntimeException ignored) {}
 
@@ -95,7 +95,7 @@ public class GoblinEntityRenderer extends GoblinBodyRenderer {
 
         // 2. Alineación de rotación durante escenas (Sex Mode)
         if (entity.isSexModeActive()) {
-            UUID partnerId = entity.getPartnerUUID();
+            UUID partnerId = entity.getSexPartnerUUID();
             if (partnerId != null) {
                 Player partner = entity.level().getPlayerByUUID(partnerId);
                 if (partner != null) {

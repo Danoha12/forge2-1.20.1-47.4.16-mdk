@@ -35,9 +35,6 @@ public abstract class ColoredNpcArmRenderer<T extends BaseNpcEntity> extends Npc
         super(context, model);
     }
 
-    protected ColoredNpcArmRenderer(GeoModel<T> model) {
-        super(model);
-    }
 
     // ── Proveedor de Color (A implementar en KoboldHandRenderer) ─────────────
 

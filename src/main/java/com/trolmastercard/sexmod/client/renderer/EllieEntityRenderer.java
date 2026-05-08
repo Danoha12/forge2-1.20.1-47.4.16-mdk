@@ -10,8 +10,10 @@ import software.bernie.geckolib.model.GeoModel;
  */
 public class EllieEntityRenderer extends BaseNpcRenderer<EllieEntity> {
 
-    public EllieEntityRenderer(EntityRendererProvider.Context context, GeoModel<EllieEntity> model, float shadowRadius) {
-        // Nota: En la 1.20.1, el shadowRadius debe ser un float.
-        super(context, model, shadowRadius);
+    public EllieEntityRenderer(EntityRendererProvider.Context context, GeoModel<EllieEntity> model) {
+        super(context, model); // Solo le pasamos context y model a la base
+
+        // Si quieres definir el tamaño de la sombra, se hace así:
+        this.shadowRadius = 0.4F;
     }
 }

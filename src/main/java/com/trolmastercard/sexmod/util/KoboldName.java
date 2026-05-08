@@ -5,7 +5,6 @@ import net.minecraft.util.RandomSource;
 /**
  * KoboldName — Portado a 1.20.1.
  * * Lista de nombres posibles para los miembros de la tribu.
- * Incluye un método estático para obtener un nombre aleatorio de forma eficiente.
  */
 public enum KoboldName {
     Vags, Snis, Suk, Snok, Orpu, Dovni, Ahza, Zarbu, Rupli, Kagri,
@@ -15,11 +14,12 @@ public enum KoboldName {
     Morn, Snogs, Teg, Tigs, Rokko, Oblu, Tihzi, Mohru, Sahsu, Mahlu;
 
     /**
-     * @param random Fuente de aleatoriedad (usualmente entity.getRandom())
-     * @return Un nombre aleatorio de la lista convertido a String.
+     * 🚨 REPARACIÓN: Cambiamos names.size() por names.length
+     * y el nombre a randomName para que coincida con la entidad.
      */
-    public static String getRandomName(RandomSource random) {
+    public static String randomName(RandomSource random) {
         KoboldName[] names = values();
-        return names[random.nextInt(names.size())].name();
+        // Usamos .length porque es un array
+        return names[random.nextInt(names.length)].name();
     }
 }

@@ -49,8 +49,8 @@ public class AllieBodyRenderer<T extends AllieEntity> extends NpcArmRenderer<T> 
     /** Partial ticks almacenados por la llamada de renderizado. */
     private float partialTick = 0.0f;
 
-    public AllieBodyRenderer(GeoModel<T> model) {
-        super(model);
+    public AllieBodyRenderer(net.minecraft.client.renderer.entity.EntityRendererProvider.Context renderManager, GeoModel<T> model) {
+        super(renderManager, model);
         ALL_INSTANCES.add(this);
     }
 
@@ -96,7 +96,18 @@ public class AllieBodyRenderer<T extends AllieEntity> extends NpcArmRenderer<T> 
 
     // ── Physics per-bone (GeckoLib 4 update) ─────────────────────────────────
 
+    // ── Inyección de Físicas en GeckoLib 4 ───────────────────────────────────
+
     @Override
+    public void preRender(PoseStack poseStack, T animatable, software.bernie.geckolib.cache.object.BakedGeoModel model, net.minecraft.client.renderer.MultiBufferSource bufferSource, com.mojang.blaze3d.vertex.VertexConsumer buffer, boolean isReRender, float partialTick, int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {
+        super.preRender(poseStack, animatable, model, bufferSource, buffer, isReRender, partialTick, packedLight, packedOverlay, red, green, blue, alpha);
+
+        // Buscamos los huesos y les aplicamos la física manualmente
+        model.getBone("tail").ifPresent(bone -> onBoneProcess("tail", bone, partialTick));
+        model.getBone("body").ifPresent(bone -> onBoneProcess("body", bone, partialTick));
+        model.getBone("armL").ifPresent(bone -> onBoneProcess("armL", bone, partialTick));
+        model.getBone("armR").ifPresent(bone -> onBoneProcess("armR", bone, partialTick));
+    }
     protected void onBoneProcess(String name, GeoBone bone, float partialTick) {
         this.partialTick = partialTick; // Guardar partial tick para los cálculos
         if (this.entityRef == null || this.entityRef.isNoAi()) return; // isNoAi() reemplaza a isFrozen()

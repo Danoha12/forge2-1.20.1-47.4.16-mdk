@@ -4,6 +4,7 @@ import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;
 import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.util.MathUtil;
+import com.trolmastercard.sexmod.entity.NpcStateAccessor;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -37,7 +38,7 @@ public class PlayerCamEventHandler {
         for (BaseNpcEntity npc : BaseNpcEntity.getAllNpcs()) {
             if (npc.isRemoved()) continue;
 
-            UUID partnerId = npc.getTargetPlayerId();
+            UUID partnerId = ((NpcStateAccessor) npc).getSexPartnerUUID();
             AnimState state = npc.getAnimState();
 
             if (partnerId != null && state != AnimState.NULL && state.hasPlayer) {
@@ -58,7 +59,7 @@ public class PlayerCamEventHandler {
         if (localPlayer == null) return;
 
         // Caso A: El jugador está siendo "poseído" por un PlayerKoboldEntity
-        PlayerKoboldEntity pk = PlayerKoboldEntity.getForPlayer(localPlayer);
+        PlayerKoboldEntity pk = PlayerKoboldEntity.getForPlayer(localPlayer.getUUID());
         if (pk != null && pk.isSexModeActive()) {
             event.setCanceled(true);
             return;
@@ -68,7 +69,7 @@ public class PlayerCamEventHandler {
         for (BaseNpcEntity npc : BaseNpcEntity.getAllNpcs()) {
             if (npc.isRemoved()) continue;
 
-            UUID partnerId = npc.getTargetPlayerId();
+            UUID partnerId = ((NpcStateAccessor) npc).getSexPartnerUUID();
             AnimState state = npc.getAnimState();
 
             if (partnerId != null && state != null && state.hasPlayer) {
@@ -104,8 +105,14 @@ public class PlayerCamEventHandler {
         if (mc.options.getCameraType() != CameraType.FIRST_PERSON) return;
 
         // Buscamos si hay un NPC interactuando con nosotros que requiera Boy-Cam
-        BaseNpcEntity targetNpc = BaseNpcEntity.getNpcForPlayer(mc.player.getUUID(), false);
-        if (targetNpc == null) return;
+        // 🚨 Búsqueda manual usando nuestro sensor moderno (NpcStateAccessor)
+        BaseNpcEntity targetNpc = null;
+        for (BaseNpcEntity npc : BaseNpcEntity.getAllNpcs()) {
+            if (!npc.isRemoved() && mc.player.getUUID().equals(((NpcStateAccessor) npc).getSexPartnerUUID())) {
+                targetNpc = npc;
+                break;
+            }
+        }
 
         AnimState state = targetNpc.getAnimState();
         if (state == null || !state.useBoyCam) return;
@@ -123,7 +130,8 @@ public class PlayerCamEventHandler {
         } else {
             // Interpolación para que la cámara no dé tirones si el NPC se mueve
             Vec3 boneOld = targetNpc.getLastTickBonePosition("boyCam");
-            bonePos = MathUtil.lerpVec3(boneOld, boneCurrent, event.renderTickTime);
+            // Usamos la herramienta 'lerp' que ya viene nativa en la 1.20.1
+            bonePos = boneOld.lerp(boneCurrent, event.renderTickTime);
         }
 
         // Colocamos al jugador de modo que sus "ojos" coincidan con el hueso del NPC

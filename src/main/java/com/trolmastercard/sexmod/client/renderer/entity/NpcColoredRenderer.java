@@ -28,12 +28,12 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public abstract class NpcColoredRenderer<T extends BaseNpcEntity> extends BaseNpcRenderer<T> {
 
-    protected static final int[] WHITE_RGB = {255, 255, 255};
+    protected static final net.minecraft.core.Vec3i WHITE_RGB = new net.minecraft.core.Vec3i(255, 255, 255);
 
     /** * Caché global: (boneName.hash ^ entity.UUID.hash) → RGB[3]
      * Usamos ConcurrentHashMap para prevenir ConcurrentModificationException en multijugador.
      */
-    static final Map<Integer, int[]> boneColorCache = new ConcurrentHashMap<>();
+    static final Map<Integer, net.minecraft.core.Vec3i> boneColorCache = new ConcurrentHashMap<>();
 
     public NpcColoredRenderer(EntityRendererProvider.Context ctx, GeoModel<T> model) {
         // En 1.20.1, GeoEntityRenderer ya no pide el EntityType ni shadowRadius en el constructor
@@ -46,23 +46,26 @@ public abstract class NpcColoredRenderer<T extends BaseNpcEntity> extends BaseNp
 
     // ── Resolución de Color ───────────────────────────────────────────────────
 
-    protected int[] getCachedBoneColor(T animatable, GeoBone bone) {
+    // ── Resolución de Color ───────────────────────────────────────────────────
+
+    protected net.minecraft.core.Vec3i getCachedBoneColor(T animatable, GeoBone bone) {
         String name = bone.getName();
         int key = name.hashCode() ^ animatable.getUUID().hashCode();
 
-        int[] cached = boneColorCache.get(key);
+        net.minecraft.core.Vec3i cached = boneColorCache.get(key);
         if (cached != null) return cached;
 
-        int[] color = getBoneColor(name);
-        int[] transformed = transformColor(color);
+        net.minecraft.core.Vec3i color = getBoneColor(name);
+        net.minecraft.core.Vec3i transformed = transformColor(color);
         boneColorCache.put(key, transformed);
 
         return transformed;
     }
 
-    protected abstract int[] getBoneColor(String boneName);
+    @Override
+    protected abstract net.minecraft.core.Vec3i getBoneColor(String boneName);
 
-    protected int[] transformColor(int[] rgb) {
+    protected net.minecraft.core.Vec3i transformColor(net.minecraft.core.Vec3i rgb) {
         return rgb;
     }
 
@@ -112,10 +115,10 @@ public abstract class NpcColoredRenderer<T extends BaseNpcEntity> extends BaseNp
         }
 
         // 2. Aplicar color por hueso desde la subclase
-        int[] rgb = getCachedBoneColor(animatable, bone);
-        float r = rgb[0] / 255.0F;
-        float g = rgb[1] / 255.0F;
-        float b2 = rgb[2] / 255.0F;
+        net.minecraft.core.Vec3i rgb = getCachedBoneColor(animatable, bone);
+        float r = rgb.getX() / 255.0F;
+        float g = rgb.getY() / 255.0F;
+        float b2 = rgb.getZ() / 255.0F;
 
         // 3. Callback de procesamiento personalizado
         onBoneProcess(name, bone);

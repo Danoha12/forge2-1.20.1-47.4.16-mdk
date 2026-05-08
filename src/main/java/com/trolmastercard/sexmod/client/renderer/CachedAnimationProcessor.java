@@ -23,32 +23,37 @@ public class CachedAnimationProcessor<T extends GeoAnimatable> extends Animation
     }
 
     // =========================================================================
-    //  Búsqueda con Caché
+    //  Búsqueda con Caché (Actualizado y Automático)
     // =========================================================================
 
     @Override
     public CoreGeoBone getBone(String name) {
         // Primero intentamos nuestro caché rápido
-        CoreGeoBone bone = this.boneCache.get(name);
-        if (bone != null) return bone;
+        CoreGeoBone cachedBone = this.boneCache.get(name);
+        if (cachedBone != null) return cachedBone;
 
-        // Si no está (por alguna razón), dejamos que el super haga su trabajo
-        return super.getBone(name);
+        // Si no está, dejamos que el sistema original de GeckoLib 4 lo busque
+        CoreGeoBone bone = super.getBone(name);
+
+        // Si lo encontró, lo guardamos en nuestro caché para la próxima vez
+        if (bone != null) {
+            this.boneCache.put(name, bone);
+        }
+
+        return bone;
     }
 
     // =========================================================================
-    //  Mantenimiento del Caché
+    //  Mantenimiento del Caché (Sin @Override ni super para no crashear)
     // =========================================================================
 
-    @Override
+    // Se mantiene por si el mod antiguo lo llama, pero ya solo afecta a nuestro caché
     public void registerBone(CoreGeoBone bone) {
-        super.registerBone(bone);
         this.boneCache.put(bone.getName(), bone);
     }
 
-    @Override
+    // Se mantiene por si el mod antiguo lo llama, pero ya solo afecta a nuestro caché
     public void clearBones() {
-        super.clearBones();
         this.boneCache.clear();
     }
 }

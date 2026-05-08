@@ -90,8 +90,8 @@ public class NpcCustomizeScreen extends Screen {
       int posX = this.width / 4;
       int posY = this.height * 3 / 4;
       // InventoryScreen.renderEntityInInventory es el estándar de MC para esto
-      InventoryScreen.renderEntityInInventory(graphics, posX, posY, 70, (float)posX - mouseX, (float)posY - 50 - mouseY, this.previewEntity);
-    }
+// En 1.20.1 se usa la variante "FollowsMouse"
+      InventoryScreen.renderEntityInInventoryFollowsMouse(graphics, posX, posY, 70, (float)posX - mouseX, (float)posY - 50 - mouseY, this.previewEntity);    }
   }
 
   private void renderControlButtons(GuiGraphics graphics, int mx, int my) {
@@ -189,4 +189,16 @@ public class NpcCustomizeScreen extends Screen {
 
   @Override
   public boolean isPauseScreen() { return false; }
+// ── PUERTOS PARA EL SCROLL WIDGET ──
+
+  public boolean isGirlSpecificLocked(int index) {
+    // 🚨 Cambia esto por tu lógica real de bloqueos si la tienes
+    return false;
+  }
+
+  public float getSliderValue(int index) {
+    // 🚨 Retorna el valor actual del slider (0 a 100).
+    // Aquí deberías leer el valor desde tu clothingData o de la entidad
+    return 50.0F; // 50 de prueba
+  }
 }

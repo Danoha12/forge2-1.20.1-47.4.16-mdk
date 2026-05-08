@@ -2,6 +2,8 @@ package com.trolmastercard.sexmod.entity.player;
 
 import com.trolmastercard.sexmod.client.model.JennyHandModel;
 import com.trolmastercard.sexmod.client.model.JennyHandNudeModel;
+import com.trolmastercard.sexmod.client.model.NpcHandModel;
+import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;
 import com.trolmastercard.sexmod.network.ModNetwork;
 import com.trolmastercard.sexmod.network.packet.CameraControlPacket;
 import com.trolmastercard.sexmod.network.packet.NpcActionQueuePacket;

@@ -3,7 +3,7 @@ package com.trolmastercard.sexmod.network.packet;
 import com.trolmastercard.sexmod.network.ModNetwork;
 import com.trolmastercard.sexmod.tribe.TribeManager;
 // NOTA: Asumo que tienes una clase StructurePlacer
-import com.trolmastercard.sexmod.world.StructurePlacer;
+import com.trolmastercard.sexmod.world.gen.StructurePlacer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;

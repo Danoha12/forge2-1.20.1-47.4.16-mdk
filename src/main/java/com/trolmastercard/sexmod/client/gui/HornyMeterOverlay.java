@@ -28,7 +28,9 @@ public class HornyMeterOverlay {
     // ── Estado Global ────────────────────────────────────────────────────────
     public static boolean visible = false;
     public static double interactionProgress = 0.0;
-
+    public static boolean isVisible() {
+        return visible;
+    }
     private static double smoothProgress = 0.0;
     private static float slideInFactor = 0.0f;
     private static float flyOutFactor = 0.0f;
@@ -69,7 +71,9 @@ public class HornyMeterOverlay {
     public static void showSexUI() {
         show();
     }
-
+    public static void hideSexUI() {
+        hide();
+    }
     // ── Renderizado ──────────────────────────────────────────────────────────
 
     @SubscribeEvent
@@ -139,4 +143,27 @@ public class HornyMeterOverlay {
         RenderSystem.disableBlend();
         pose.popPose();
     }
-}
+    // ── API Pública (Reconectada para Allie) ─────────────────────────────────
+
+    public static void onSexStart() {
+        show();
+    }
+
+    public static void onSexEnd() {
+        hide();
+    }
+
+    public static void stop() {
+        reset();
+    }
+
+    public static void setVisible(boolean v) {
+        if (v) show();
+        else hide();
+    }
+
+    // Alias para que Allie no marque error al sumar puntos
+    public static void addValue(double amount) {
+        addHorny(amount);
+    }
+} // 👈 Fin de la clase

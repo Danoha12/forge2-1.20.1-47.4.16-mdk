@@ -2,6 +2,7 @@ package com.trolmastercard.sexmod.client.model; // Sugerencia de paquete para mo
 
 import com.trolmastercard.sexmod.ClothingOverlayEntity; // Ajusta el import si lo moviste
 // import com.trolmastercard.sexmod.registry.ModelWhitelist; // Descomenta si existe
+import com.trolmastercard.sexmod.registry.ModelWhitelist;
 import net.minecraft.resources.ResourceLocation;
 import software.bernie.geckolib.model.GeoModel;
 

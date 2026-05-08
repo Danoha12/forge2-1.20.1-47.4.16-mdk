@@ -1,7 +1,9 @@
 package com.trolmastercard.sexmod.event;
 
 import com.trolmastercard.sexmod.client.ModKeyBindings;
+import com.trolmastercard.sexmod.client.model.FishingRodBoneModel;
 import com.trolmastercard.sexmod.command.NpcSpawnCommand;
+import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -20,5 +22,10 @@ public class ModEvent {
         event.register(ModKeyBindings.ACTION_KEY);
         event.register(ModKeyBindings.FLY_UP);
         event.register(ModKeyBindings.FLY_DOWN);
+    }
+
+    @SubscribeEvent
+    public static void registerLayerDefinitions(EntityRenderersEvent.RegisterLayerDefinitions event) {
+        event.registerLayerDefinition(FishingRodBoneModel.LAYER, FishingRodBoneModel::createBodyLayer);
     }
 }

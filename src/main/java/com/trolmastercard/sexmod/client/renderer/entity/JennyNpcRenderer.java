@@ -6,7 +6,6 @@ import com.trolmastercard.sexmod.client.renderer.BaseNpcRenderer;
 import com.trolmastercard.sexmod.entity.NpcInventoryEntity;
 import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.util.BoneMatrixUtil;
-import com.trolmastercard.sexmod.util.ItemRenderUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -14,17 +13,12 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.enchantment.Enchantment;
-import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import software.bernie.geckolib.cache.object.GeoBone;
 import software.bernie.geckolib.model.GeoModel;
-
-import java.util.Map;
 
 /**
  * JennyNpcRenderer — Portado a 1.20.1 / GeckoLib 4.
  * * Maneja físicas de cabello complejas (5 secciones) y renderizado de ítems en huesos.
- * * Incluye transferencia de encantamientos visuales entre ítems de inventario.
  */
 public class JennyNpcRenderer extends BaseNpcRenderer<NpcInventoryEntity> {
 
@@ -34,41 +28,48 @@ public class JennyNpcRenderer extends BaseNpcRenderer<NpcInventoryEntity> {
     private int currentLight;
 
     public JennyNpcRenderer(EntityRendererProvider.Context context, GeoModel<NpcInventoryEntity> model, double shadowRadius) {
-        super(context, model, shadowRadius);
+        // Al padre ya solo le mandamos las 2 cosas que nos pide
+        super(context, model);
+        // Y la sombra se la configuramos directamente a la variable de GeoEntityRenderer
+        this.shadowRadius = (float) shadowRadius;
     }
 
-    // ── Resolución de Ítems y Encantamientos ─────────────────────────────────
+    // ── Captura de Contexto y Lógica de Ítems ────────────────────────────────
 
     @Override
-    protected ItemStack resolveHeldItem(ItemStack original) {
-        if (entity == null) return original;
+    public void render(NpcInventoryEntity entity, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
 
+        // 1. Lógica de Ítems Especiales (Leemos tu inventario custom)
         AnimState state = entity.getAnimState();
-        // SFW: Mapeo de estados de interacción especial
-        if (state == AnimState.SUCKBLOWJOB  || state == AnimState.STARTBLOWJOB) {
-            ItemStack weapon = entity.getWeaponSlotItem();
-            ItemStack synced = entity.getEntityData().get(NpcInventoryEntity.SYNCED_ITEM);
+        if (state == AnimState.SUCKBLOWJOB || state == AnimState.STARTBLOWJOB) {
 
-            if (synced.isEmpty()) return weapon;
+            // Leemos el SLOT_MAIN_HAND de tu NpcInventoryEntity
+            ItemStack weapon = entity.getEntityData().get(NpcInventoryEntity.SLOT_MAIN_HAND);
 
-            // En 1.20.1, el mapa de encantamientos usa la clase Enchantment como llave
-            Map<Enchantment, Integer> enchants = EnchantmentHelper.getEnchantments(synced);
-            EnchantmentHelper.setEnchantments(enchants, weapon);
-
-            entity.setItemInHand(InteractionHand.MAIN_HAND, weapon);
-            return weapon;
+            if (weapon != null && !weapon.isEmpty()) {
+                entity.setItemInHand(InteractionHand.MAIN_HAND, weapon);
+            }
         }
-        return original;
+
+        // 2. Capturamos el contexto para que onBoneProcess pueda acceder a él
+        this.currentPoseStack = poseStack;
+        this.currentBuffers = bufferSource;
+        this.currentLight = packedLight;
+
+        // 3. ¡A dibujar se ha dicho!
+        super.render(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
     }
 
     // ── Procesamiento de Huesos (Físicas y Offhand) ──────────────────────────
 
     @Override
     protected void onBoneProcess(String boneName, GeoBone bone) {
+        NpcInventoryEntity entity = this.currentEntity;
+
         // Optimización: No procesar físicas en primera persona
         if (Minecraft.getInstance().options.getCameraType().isFirstPerson()) return;
 
-        boolean isInteractive = entity != null && entity.isInteractiveMode();
+        boolean isInteractive = entity != null && entity.isInteractiveMode;
 
         switch (boneName) {
             case "head" -> headRotX = bone.getRotX();
@@ -106,9 +107,11 @@ public class JennyNpcRenderer extends BaseNpcRenderer<NpcInventoryEntity> {
     // ── Renderizado de Ítem en Hueso ─────────────────────────────────────────
 
     private void renderOffhandAtBone(GeoBone bone) {
+        NpcInventoryEntity entity = this.currentEntity;
         if (entity == null || currentPoseStack == null) return;
 
-        ItemStack offhandStack = entity.getEntityData().get(NpcInventoryEntity.OFFHAND_ITEM);
+        // Usamos la variable real de tu NpcInventoryEntity
+        ItemStack offhandStack = entity.getEntityData().get(NpcInventoryEntity.SLOT_OFF_HAND);
         if (offhandStack.isEmpty()) return;
 
         // No renderizar si el NPC está en proceso de spawn (escala < 1)
@@ -137,17 +140,5 @@ public class JennyNpcRenderer extends BaseNpcRenderer<NpcInventoryEntity> {
         );
 
         currentPoseStack.popPose();
-    }
-
-    // ── Captura de Contexto de Renderizado ───────────────────────────────────
-
-    @Override
-    public void render(NpcInventoryEntity entity, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
-        // Capturamos el contexto para que onBoneProcess pueda acceder a él
-        this.currentPoseStack = poseStack;
-        this.currentBuffers = bufferSource;
-        this.currentLight = packedLight;
-
-        super.render(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
     }
 }

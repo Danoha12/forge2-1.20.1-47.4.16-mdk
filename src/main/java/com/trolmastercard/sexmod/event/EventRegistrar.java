@@ -1,8 +1,8 @@
 package com.trolmastercard.sexmod.event;
 
 import com.trolmastercard.sexmod.client.gui.NpcCustomizeScreen;
-import com.trolmastercard.sexmod.client.model.CustomModelManager;
-import com.trolmastercard.sexmod.data.CustomModelSavedData;
+import com.trolmastercard.sexmod.client.CustomModelManager;
+import com.trolmastercard.sexmod.util.CustomModelSavedData;
 import com.trolmastercard.sexmod.item.AlliesLampItem;
 import com.trolmastercard.sexmod.item.WinchesterItem;
 import com.trolmastercard.sexmod.tribe.TribeManager;

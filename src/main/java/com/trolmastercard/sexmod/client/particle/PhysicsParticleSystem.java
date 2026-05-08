@@ -59,7 +59,7 @@ public class PhysicsParticleSystem {
                         origin.z + (this.owner.getRandom().nextFloat() * 2 - 1) * this.spreadRadius
                 );
                 // Asumo que PhysicsParticle ahora recibe Vec3 en su constructor
-                this.particles.add(new PhysicsParticle(this.owner.level(), this.velocitySource.getVelocity(this.owner), spread));
+                this.particles.add(new PhysicsParticle(this.owner.level(), spread, this.velocitySource.getVelocity(this.owner), 60));
             }
         }
 
@@ -77,9 +77,9 @@ public class PhysicsParticleSystem {
 
         // Ordenamiento nativo optimizado (de lejos a cerca)
         this.particles.sort((p1, p2) -> {
-            double d1 = camPos.distanceToSqr(p1.x, p1.y, p1.z);
-            double d2 = camPos.distanceToSqr(p2.x, p2.y, p2.z);
-            return Double.compare(d2, d1); // Orden descendente
+            double d1 = camPos.distanceToSqr(p1.getX(), p1.getY(), p1.getZ());
+            double d2 = camPos.distanceToSqr(p2.getX(), p2.getY(), p2.getZ());
+            return Double.compare(d2, d1);
         });
 
         buf.begin(VertexFormat.Mode.DEBUG_LINE_STRIP, DefaultVertexFormat.POSITION_COLOR);
@@ -88,10 +88,10 @@ public class PhysicsParticleSystem {
         double maxChainSqr = this.maxChainDist * this.maxChainDist;
 
         for (PhysicsParticle p : this.particles) {
-            // LERP manual de la partícula
-            double px = net.minecraft.util.Mth.lerp(pt, p.xPrev, p.x);
-            double py = net.minecraft.util.Mth.lerp(pt, p.yPrev, p.y);
-            double pz = net.minecraft.util.Mth.lerp(pt, p.zPrev, p.z);
+            // 🚨 REPARACIÓN: LERP usando los Getters para la posición actual y la anterior
+            double px = net.minecraft.util.Mth.lerp(pt, p.getXo(), p.getX());
+            double py = net.minecraft.util.Mth.lerp(pt, p.getYo(), p.getY());
+            double pz = net.minecraft.util.Mth.lerp(pt, p.getZo(), p.getZ());
 
             Vec3 pos = new Vec3(px, py, pz);
 

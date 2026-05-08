@@ -28,7 +28,7 @@ public class FutaCommand {
     // Usamos el directorio raíz del juego de forma segura a través de FMLPaths
     private static final Path FOLDER_PATH = FMLPaths.GAMEDIR.get().resolve("sexmod");
     private static final Path FILE_PATH = FOLDER_PATH.resolve("futa.txt");
-
+    public static boolean futaModeEnabled = false;
     private static final int PARTICLE_COUNT = 10;
     private static final float PARTICLE_SPEED = 0.025F;
 

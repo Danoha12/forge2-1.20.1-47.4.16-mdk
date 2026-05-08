@@ -72,6 +72,8 @@ public abstract class NpcGoalBase extends Goal {
         this.owner = null;
     }
 
+    protected abstract void onStateChanged(GoalState newState);
+
     @Override
     public void tick() {
         if (this.owner == null) return;

@@ -93,8 +93,11 @@ public class MangleLieModel extends BaseNpcModel<BaseNpcEntity> {
     }
 
     private static void setBoneVisible(AnimationProcessor<?> proc, String name, boolean visible) {
-        GeoBone bone = proc.getBone(name);
-        if (bone != null) bone.setHidden(!visible);
+        // 🚨 EL AJUSTE: Añadimos (GeoBone) para convertir el CoreGeoBone
+        GeoBone bone = (GeoBone) proc.getBone(name);
+        if (bone != null) {
+            bone.setHidden(!visible);
+        }
     }
 
     public static Vec3 computeBodyVec(BaseNpcEntity entity, float partial) {

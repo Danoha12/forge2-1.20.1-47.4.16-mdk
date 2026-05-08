@@ -4,7 +4,7 @@ import com.trolmastercard.sexmod.entity.AllieEntity;
 import com.trolmastercard.sexmod.entity.BaseNpcEntity;
 import com.trolmastercard.sexmod.entity.NpcInventoryEntity;
 import com.trolmastercard.sexmod.entity.PlayerKoboldEntity;
-import com.trolmastercard.sexmod.entity.SlimeNpcEntity;
+import com.trolmastercard.sexmod.entity.SlimeEntity;
 import com.trolmastercard.sexmod.registry.AnimState;
 import com.trolmastercard.sexmod.util.ModConstants;
 import net.minecraft.client.Minecraft;

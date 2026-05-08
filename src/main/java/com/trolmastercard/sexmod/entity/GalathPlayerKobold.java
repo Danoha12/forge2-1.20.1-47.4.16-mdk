@@ -1,8 +1,10 @@
 package com.trolmastercard.sexmod.entity;
 
+import com.trolmastercard.sexmod.client.model.NpcHandModel;
 import com.trolmastercard.sexmod.client.model.entity.GalathHandModel;
 import com.trolmastercard.sexmod.registry.AnimState;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
 import software.bernie.geckolib.core.animation.AnimatableManager;
 import software.bernie.geckolib.core.animation.AnimationController;
@@ -40,6 +42,11 @@ public class GalathPlayerKobold extends PlayerKoboldEntity implements FlyingNpcE
 
     @Override public float getModelScale() { return 2.3F; }
 
+    @Override
+    public Vec3 getBonePosition(String boneName) {
+        return null;
+    }
+
     @Override public NpcHandModel createHandModel(int slot) { return new GalathHandModel(); }
 
     @Override public String getHandTexturePath(int slot) { return "textures/entity/galath/hand.png"; }
@@ -53,15 +60,20 @@ public class GalathPlayerKobold extends PlayerKoboldEntity implements FlyingNpcE
                 setPartnerUUID(playerId);
                 setAnimStateFiltered(AnimState.RAPE_INTRO);
                 // Sincroniza los brazos del avatar
-                setSubAnimState(getArmHeightSlot(), AnimState.RAPE_INTRO);
+                setAnimState(getArmHeightSlot(), AnimState.RAPE_INTRO);
             }
             case "mating press" -> {
                 setPartnerUUID(playerId);
                 setAnimStateFiltered(AnimState.CORRUPT_SLOW);
-                setSubAnimState(getArmHeightSlot(), AnimState.CORRUPT_SLOW);
+                setAnimState(getArmHeightSlot(), AnimState.CORRUPT_SLOW);
                 startFlight(); // Inicia el vuelo de combate/interacción
             }
         }
+    }
+
+    @Override
+    public void initDefaultState() {
+        
     }
 
     // ── Control de Estados (Protección de Cadenas) ───────────────────────────
@@ -143,7 +155,7 @@ public class GalathPlayerKobold extends PlayerKoboldEntity implements FlyingNpcE
         return switch (a) {
             case STRIP         -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.galath.strip"));
             case ATTACK        -> state.setAndContinue(RawAnimation.begin().thenPlay("animation.galath.attack1"));
-            case BOW_CHARGE    -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.galath.bowcharge"));
+            case BOW           -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.galath.bowcharge"));
             case SIT           -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.galath.sit"));
             case RAPE_INTRO    -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.galath.rape_intro"));
             case RAPE_ON_GOING -> state.setAndContinue(RawAnimation.begin().thenLoop("animation.galath.rape" + ar));

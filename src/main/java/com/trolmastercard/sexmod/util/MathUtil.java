@@ -112,4 +112,15 @@ public final class MathUtil {
                 (int)Mth.lerp(t, from[3], to[3])
         };
     }
+    public static boolean inRange(float val, int min, int max) {
+        return val >= min && val <= max;
+    }
+
+    public static Vec3 lerp(Vec3 start, Vec3 end, float pct) {
+        return new Vec3(
+                net.minecraft.util.Mth.lerp(pct, start.x, end.x),
+                net.minecraft.util.Mth.lerp(pct, start.y, end.y),
+                net.minecraft.util.Mth.lerp(pct, start.z, end.z)
+        );
+    }
 }

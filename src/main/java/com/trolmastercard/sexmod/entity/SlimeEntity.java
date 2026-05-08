@@ -122,6 +122,20 @@ public class SlimeEntity extends BaseNpcEntity {
     }
 
     @Override
+    public void triggerAction(String action, java.util.UUID playerUUID) {
+        // Aquí procesas lo que pasa cuando el jugador activa algo desde la UI
+        switch (action) {
+            case "dismiss" -> {
+                this.setOwnerUUID(null);
+                this.resetHorny();
+                this.setAnimStateFiltered(AnimState.NULL);
+            }
+            case "undress" -> setAnimStateFiltered(AnimState.UNDRESS);
+            case "dress" -> setAnimStateFiltered(AnimState.DRESS);
+            // Agrega más casos según necesites para la Slime
+        }
+    }
+    @Override
     public void baseTick() {
         super.baseTick();
         tickHornyApproach();
@@ -173,9 +187,22 @@ public class SlimeEntity extends BaseNpcEntity {
         this.entityData.set(DATA_TICKS_UNTIL_BIRTH, ticksLeft - 1);
         if (--ticksLeft >= 0) return;
 
-        KoboldEgg egg = new KoboldEgg(ModEntityRegistry.KOBOLD_EGG.get(), this.level());
-        egg.setPos(this.getX(), this.getY(), this.getZ());
-        this.level().addFreshEntity(egg);
+        // 🟢 Spawneamos un Slime de Minecraft original (el más pequeñito)
+        net.minecraft.world.entity.monster.Slime miniSlime = net.minecraft.world.entity.EntityType.SLIME.create(this.level());
+
+        if (miniSlime != null) {
+            miniSlime.setPos(this.getX(), this.getY(), this.getZ());
+
+            // En 1.20.1, setSize(1, true) lo hace el tamaño mínimo
+            miniSlime.setSize(1, true);
+
+            // 💡 El truco del maistro: Le ponemos un TAG especial
+            // Esto nos servirá después para saber que este Slime debe "evolucionar"
+            miniSlime.addTag("future_chicaslime");
+
+            this.level().addFreshEntity(miniSlime);
+        }
+
         this.entityData.set(DATA_TICKS_UNTIL_BIRTH, -1);
     }
 
@@ -274,10 +301,13 @@ public class SlimeEntity extends BaseNpcEntity {
         this.jumpTick = 0;
     }
 
-    private float getTargetYaw() {
+    @Override
+    public float getTargetYaw() {
         if (this.entityData.get(DATA_TICKS_UNTIL_BIRTH) != -1 || this.entityData.get(DATA_HORNY_LEVEL) < 2) return getRandomYaw();
+
         Player nearest = this.level().getNearestPlayer(this, LOOK_RANGE);
         if (nearest == null || getSexPartner(nearest) != null) return getRandomYaw();
+
         return (float) Math.toDegrees(Math.atan2(this.getZ() - nearest.getZ(), this.getX() - nearest.getX())) + 90.0F;
     }
 
@@ -313,7 +343,7 @@ public class SlimeEntity extends BaseNpcEntity {
     public void registerControllers(AnimatableManager.ControllerRegistrar registrar) {
         // Controlador de Ojos
         registrar.add(new AnimationController<>(this, "eyes", 0, state -> {
-            if (this.level() instanceof FakeWorld) return PlayState.STOP;
+            if (this.level() == null) return PlayState.STOP;
             AnimState as = getAnimState();
             String anim = (as != AnimState.NULL && as != null && as.autoBlink) ? "animation.slime.fhappy" : "animation.slime.null";
             return state.setAndContinue(RawAnimation.begin().thenLoop(anim));
@@ -321,7 +351,7 @@ public class SlimeEntity extends BaseNpcEntity {
 
         // Controlador de Acción
         AnimationController<SlimeEntity> actionCtrl = new AnimationController<>(this, "action", 0, state -> {
-            if (this.level() instanceof FakeWorld) return PlayState.STOP;
+            if (this.level() == null) return PlayState.STOP;
             AnimState as = getAnimState();
 
             if (as == AnimState.NULL || as == null) {
@@ -351,7 +381,7 @@ public class SlimeEntity extends BaseNpcEntity {
             String sound = event.getKeyframeData().getSound();
             switch (sound) {
                 case "undress" -> {
-                    if (isLocalPlayer()) { setNpcCustomModel("0"); setAnimStateFiltered(AnimState.NULL); }
+                    if (isLocalPlayer()) { this.entityData.set(BaseNpcEntity.DATA_OUTFIT_INDEX, 0); setAnimStateFiltered(AnimState.NULL); }
                 }
                 case "dress" -> {
                     if (isLocalPlayer()) { this.entityData.set(BaseNpcEntity.DATA_OUTFIT_INDEX, 1); setAnimStateFiltered(AnimState.NULL); resetHorny(); }
@@ -367,8 +397,7 @@ public class SlimeEntity extends BaseNpcEntity {
                 case "bjcMSG1" -> playSoundEffect(SoundEvents.PLAYER_SPLASH);
                 case "bjcMSG2" -> { playSoundEffect(SoundEvents.PLAYER_SPLASH); if (isLocalPlayer()) HornyMeterOverlay.fadeOut(); }
                 case "bjcBlackScreen" -> { if (isLocalPlayer()) OutlineShaderManager.doBlackScreen(); }
-                case "bjcDone", "doggyCumDone" -> { if (isLocalPlayer()) { HornyMeterOverlay.hideSexUI(); resetHorny(); setNpcCustomAttribute("pregnant", String.valueOf(BIRTH_TICKS)); } }
-                case "doggyGoOnBedMSG1" -> { playSoundEffect(SoundEvents.PLAYER_BREATH); this.yBodyRotO = this.yBodyRot; }
+                case "bjcDone", "doggyCumDone" -> { if (isLocalPlayer()) { HornyMeterOverlay.hideSexUI(); resetHorny(); this.entityData.set(DATA_TICKS_UNTIL_BIRTH, BIRTH_TICKS); } }                case "doggyGoOnBedMSG1" -> { playSoundEffect(SoundEvents.PLAYER_BREATH); this.yBodyRotO = this.yBodyRot; }
                 case "doggyGoOnBedDone" -> setAnimStateFiltered(AnimState.WAITDOGGY);
                 case "doggystartMSG1" -> playSoundEffect(ModSounds.MISC_TOUCH[0]);
                 case "doggystartMSG2" -> playSoundEffect(ModSounds.MISC_TOUCH[1]);
@@ -389,7 +418,7 @@ public class SlimeEntity extends BaseNpcEntity {
                     playSoundEffect(this.poundCount % 2 == 0 ? (this.random.nextInt(2) == 0 ? SoundEvents.PLAYER_SPLASH : SoundEvents.PLAYER_BREATH) : SoundEvents.PLAYER_SWIM);
                 }
                 case "doggyfastDone" -> setAnimStateFiltered(AnimState.DOGGYSLOW);
-                case "doggycumMSG1" -> { playSoundEffect(ModSounds.MISC_CUMINFLATION[0], 4.0F); playSoundEffect(ModSounds.pickRandom(ModSounds.MISC_POUNDING), 2.0F); playSoundEffect(SoundEvents.PLAYER_SMALL_FALL); }
+                case "doggycumMSG1" -> { playSoundEffect(ModSounds.MISC_CUMINFLATION[0].get(), 4.0F); playSoundEffect(ModSounds.pickRandom(ModSounds.MISC_POUNDING), 2.0F); playSoundEffect(SoundEvents.PLAYER_SMALL_FALL); }
                 case "jumpStart" -> playSoundEffect(SoundEvents.PLAYER_SPLASH);
                 case "jumpStartDone" -> this.jumpState = JumpState.JUMP_AIR;
                 case "jumpEndSound" -> playSoundEffect(SoundEvents.PLAYER_BREATH);
@@ -411,5 +440,31 @@ public class SlimeEntity extends BaseNpcEntity {
 
         public final String animName;
         JumpState(String anim) { this.animName = anim; }
+    }
+    @Override
+    public Vec3 getBonePosition(String boneName) {
+        // 1. Solo podemos saber la posición exacta en el Cliente (donde se renderiza el modelo)
+        if (this.level().isClientSide) {
+            // Buscamos el modelo en el caché de GeckoLib
+            var model = software.bernie.geckolib.cache.GeckoLibCache.getBakedModels().get(
+                    new net.minecraft.resources.ResourceLocation("sexmod", "geo/slime.geo.json") // 🚨 Pon tu ruta real aquí
+            );
+            if (model != null) {
+                // Intentamos encontrar el hueso por nombre
+                return model.getBone(boneName).map(bone -> {
+                    // 🚨 MATEMÁTICA DE PRECISIÓN:
+                    // Convertimos la posición local del hueso (relativa al modelo)
+                    // a coordenadas del mundo de Minecraft.
+                    float x = (float) bone.getWorldPosition().x;
+                    float y = (float) bone.getWorldPosition().y;
+                    float z = (float) bone.getWorldPosition().z;
+
+                    return this.position().add(x, y, z);
+                }).orElse(this.position()); // Si no encuentra el hueso, usa la posición base
+            }
+        }
+
+        // 2. En el Servidor no hay "huesos" visuales, así que usamos la posición de la entidad
+        return this.position();
     }
 }

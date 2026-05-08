@@ -48,7 +48,7 @@ public class StaffItem extends Item implements GeoItem {
 
         if (level.isClientSide()) {
             // Solo abrir si hay miembros de la tribu (Kobolds) cerca o en el mundo
-            if (!KoboldEntity.getAllKobolds().isEmpty()) {
+            if (!level.getEntitiesOfClass(KoboldEntity.class, player.getBoundingBox().inflate(64.0D)).isEmpty()) {
                 openStaffScreen();
                 return InteractionResultHolder.success(stack);
             }
@@ -60,7 +60,7 @@ public class StaffItem extends Item implements GeoItem {
     @OnlyIn(Dist.CLIENT)
     private void openStaffScreen() {
         Minecraft.getInstance().setScreen(new StaffCommandScreen());
-        ModNetwork.CHANNEL.sendToServer(new TribeUIValuesPacket());
+        ModNetwork.CHANNEL.sendToServer(new TribeUIValuesPacket(false, new java.util.ArrayList<>()));
     }
 
     // ── GeckoLib 4 ────────────────────────────────────────────────────────────

@@ -1,13 +1,15 @@
 package com.trolmastercard.sexmod.entity;
 
-import com.trolmastercard.sexmod.client.model.entity.CatHandModel;
+import com.trolmastercard.sexmod.client.model.entity.LunaHandModel;
 import com.trolmastercard.sexmod.registry.AnimState;
+import com.trolmastercard.sexmod.registry.ModEntities;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
 import software.bernie.geckolib.core.animation.*;
 import software.bernie.geckolib.core.object.PlayState;
@@ -20,7 +22,7 @@ import java.util.UUID;
  * * Variante de avatar de jugador para "Cat" (Luna).
  * * Implementa lógica de pesca, escalas personalizadas (1.6x) y secuencias de animación.
  */
-public class CatPlayerKobold extends PlayerKoboldEntity {
+public class LunaPlayerKobold extends PlayerKoboldEntity {
 
     private final AnimatableInstanceCache animCache = GeckoLibUtil.createInstanceCache(this);
 
@@ -28,7 +30,7 @@ public class CatPlayerKobold extends PlayerKoboldEntity {
     protected boolean slowVariant = false; // Antiguo campo 'ap'
     protected int attackCounter = 1;
 
-    public CatPlayerKobold(Level level, UUID uuid) {
+    public LunaPlayerKobold(Level level, UUID uuid) {
         super(ModEntities.PLAYER_CAT.get(), level);
         this.setOwnerUUID(uuid);
     }
@@ -38,6 +40,11 @@ public class CatPlayerKobold extends PlayerKoboldEntity {
     @Override
     public float getModelScale() {
         return 1.6F;
+    }
+
+    @Override
+    public Vec3 getBonePosition(String boneName) {
+        return null;
     }
 
     @Override
@@ -73,6 +80,11 @@ public class CatPlayerKobold extends PlayerKoboldEntity {
             this.startInteraction(playerId);
         }
         super.onActionSelected(action, playerId);
+    }
+
+    @Override
+    public void initDefaultState() {
+
     }
 
     @Override
@@ -125,7 +137,7 @@ public class CatPlayerKobold extends PlayerKoboldEntity {
         );
     }
 
-    private PlayState movementController(AnimationState<CatPlayerKobold> state) {
+    private PlayState movementController(AnimationState<LunaPlayerKobold> state) {
         AnimState a = getAnimState();
         if (a != AnimState.NULL && a != null) {
             return state.setAndContinue(RawAnimation.begin().thenLoop("animation.cat.null"));
@@ -144,7 +156,7 @@ public class CatPlayerKobold extends PlayerKoboldEntity {
         return state.setAndContinue(RawAnimation.begin().thenLoop("animation.cat.idle"));
     }
 
-    private PlayState actionController(AnimationState<CatPlayerKobold> state) {
+    private PlayState actionController(AnimationState<LunaPlayerKobold> state) {
         AnimState a = getAnimState();
         if (a == null) return PlayState.STOP;
 

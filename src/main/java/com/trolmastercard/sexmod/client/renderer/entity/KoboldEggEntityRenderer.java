@@ -47,7 +47,7 @@ public class KoboldEggEntityRenderer extends GeoEntityRenderer<KoboldEgg> {
         }
         // 2. Pintar las manchas con el color de la futura tribu
         else if (boneName.equals("colorSpots")) {
-            String colorName = animatable.getEntityData().get(KoboldEgg.BODY_COLOR);
+            String colorName = animatable.getBodyColor();
             Vec3i rgb = EyeAndKoboldColor.safeValueOf(colorName).getMainColor();
 
             red   = rgb.getX() / 255.0F;

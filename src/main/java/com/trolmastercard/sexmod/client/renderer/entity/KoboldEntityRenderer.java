@@ -60,8 +60,9 @@ public class KoboldEntityRenderer extends GeoEntityRenderer<KoboldEntity> {
     // ── Resolución de Color por Hueso ────────────────────────────────────────
 
     protected Vec3i getBoneColor(KoboldEntity entity, String boneName) {
-        EyeAndKoboldColor bodyColor = EyeAndKoboldColor.safeValueOf(entity.getEntityData().get(KoboldEntity.BODY_COLOR));
-        EyeAndKoboldColor eyeColor = EyeAndKoboldColor.safeValueOf(entity.getEntityData().get(KoboldEntity.EYE_COLOR));
+        // Usamos los conectores directos (getters)
+        EyeAndKoboldColor bodyColor = EyeAndKoboldColor.safeValueOf(entity.getBodyColor());
+        EyeAndKoboldColor eyeColor = EyeAndKoboldColor.safeValueOf(entity.getEyeColor());
 
         if (MAIN_COLOR_BONES.contains(boneName)) return bodyColor.getMainColor();
         if (SECONDARY_COLOR_BONES.contains(boneName)) return bodyColor.getSecondaryColor();
@@ -102,7 +103,7 @@ public class KoboldEntityRenderer extends GeoEntityRenderer<KoboldEntity> {
             AnimState state = entity.getAnimState();
             switch (state) {
                 case BOW -> {
-                    boolean holdsBow = entity.getEntityData().get(KoboldEntity.HOLDS_BOW);
+                    boolean holdsBow = entity.isHoldingBow(); // O getHoldsBow() dependiendo de cómo le pusiste
                     return new ItemStack(holdsBow ? Items.BOW : Items.ARROW);
                 }
                 case ATTACK, SHOOT -> {
@@ -120,14 +121,14 @@ public class KoboldEntityRenderer extends GeoEntityRenderer<KoboldEntity> {
     protected void renderNameTag(KoboldEntity entity, Component name, PoseStack ps, MultiBufferSource buffers, int light) {
         if (entity.isInteractiveMode() || entity.getAnimState().isHideNameTag()) return;
 
-        String colorTag = entity.getEntityData().get(KoboldEntity.NAME_COLOR_TAG);
+        String colorTag = entity.getNameColorTag();
         if (colorTag == null || colorTag.equals("null")) {
             super.renderNameTag(entity, name, ps, buffers, light);
             return;
         }
 
-        // Aplicar el color de la tribu al tag del nombre
-        EyeAndKoboldColor tribeColor = EyeAndKoboldColor.safeValueOf(entity.getEntityData().get(KoboldEntity.BODY_COLOR));
+        // Aplicar el color de la tribu al tag del nombre usando el conector del cuerpo
+        EyeAndKoboldColor tribeColor = EyeAndKoboldColor.safeValueOf(entity.getBodyColor());
         Component coloredName = Component.literal(entity.getKoboldName() + " ")
                 .append(Component.literal("-" + colorTag + "-").withStyle(tribeColor.getTextStyle()));
 

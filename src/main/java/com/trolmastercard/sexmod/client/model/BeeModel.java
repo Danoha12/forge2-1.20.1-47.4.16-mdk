@@ -52,8 +52,7 @@ public class BeeModel extends BaseNpcModel<BeeEntity> {
         CoreGeoBone chest = processor.getBone("chest");
         if (chest != null && animState.getController() != null) {
             var currentAnim = animState.getController().getCurrentAnimation();
-            boolean chestAnim = currentAnim != null && currentAnim.name().contains("chest");
-            chest.setHidden(!chestAnim);
+            boolean chestAnim = currentAnim != null && currentAnim.animation().name().contains("chest");            chest.setHidden(!chestAnim);
         }
 
         // ---- Seguimiento de la cabeza (Head Look) ----

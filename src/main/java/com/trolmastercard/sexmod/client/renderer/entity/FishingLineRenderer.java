@@ -96,22 +96,33 @@ public class FishingLineRenderer extends EntityRenderer<FishingHookEntity> {
     }
 
     private void renderFishingLine(FishingHookEntity hook, LunaEntity owner, float partialTick, PoseStack ps, MultiBufferSource buffer) {
-        // Calcular posición de la mano del NPC
+        // 1. Calcular posición interpolada del dueño (Luna)
+        double ownerX = Mth.lerp(partialTick, owner.xo, owner.getX());
+        double ownerY = Mth.lerp(partialTick, owner.yo, owner.getY());
+        double ownerZ = Mth.lerp(partialTick, owner.zo, owner.getZ());
+        Vec3 ownerPos = new Vec3(ownerX, ownerY, ownerZ);
+
+        // 2. Calcular posición de la mano del NPC
         int side = owner.getMainArm() == HumanoidArm.RIGHT ? 1 : -1;
         float bodyYaw = Mth.lerp(partialTick, owner.yBodyRotO, owner.yBodyRot) * Mth.DEG_TO_RAD;
 
         double sinYaw = Mth.sin(bodyYaw);
         double cosYaw = Mth.cos(bodyYaw);
 
-        // Offset de la mano (ajustado para NPCs)
-        Vec3 handPos = owner.getRenderPosition(partialTick).add(
+        // Offset de la mano relativo al cuerpo
+        Vec3 handPos = ownerPos.add(
                 -sinYaw * 0.7D + cosYaw * (0.4D * side),
                 owner.getEyeHeight() - 0.5D,
                 -cosYaw * 0.7D - sinYaw * (0.4D * side)
         );
 
-        Vec3 hookPos = hook.getRenderPosition(partialTick);
+        // 3. Calcular posición interpolada del anzuelo (Hook)
+        double hookX = Mth.lerp(partialTick, hook.xo, hook.getX());
+        double hookY = Mth.lerp(partialTick, hook.yo, hook.getY());
+        double hookZ = Mth.lerp(partialTick, hook.zo, hook.getZ());
+        Vec3 hookPos = new Vec3(hookX, hookY, hookZ);
 
+        // 4. Calcular el vector de distancia entre la mano y el anzuelo
         double dx = handPos.x - hookPos.x;
         double dy = handPos.y - hookPos.y;
         double dz = handPos.z - hookPos.z;
@@ -119,13 +130,15 @@ public class FishingLineRenderer extends EntityRenderer<FishingHookEntity> {
         VertexConsumer lineConsumer = buffer.getBuffer(RenderType.lineStrip());
         Matrix4f matrix = ps.last().pose();
 
-        // Dibujar la cuerda como una serie de 16 segmentos
+        // 5. Dibujar la cuerda
         for (int i = 0; i <= 16; ++i) {
             float f = (float) i / 16.0F;
-            // Cálculo de parábola para la gravedad de la cuerda
             float gravity = Mth.sin(f * (float) Math.PI) * 0.2F;
+            // En 1.20.1, el método vertex() puede variar ligeramente según el RenderType,
+            // pero para lineStrip el formato suele ser POSITION_COLOR.
             lineConsumer.vertex(matrix, (float) (dx * f), (float) (dy * (f * f + f) * 0.5D + 0.2D + gravity), (float) (dz * f))
                     .color(0, 0, 0, 255)
+                    .normal(ps.last().normal(), 0, 1, 0) // Añadimos la normal por seguridad
                     .endVertex();
         }
     }

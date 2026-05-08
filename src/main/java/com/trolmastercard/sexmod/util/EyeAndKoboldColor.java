@@ -59,7 +59,8 @@ public enum EyeAndKoboldColor {
         try {
             return valueOf(name.toUpperCase());
         } catch (Exception e) {
-            return KoboldEntity.DEFAULT_COLOR; // Fallback seguro
+            // 🚨 REPARACIÓN: Cambiamos a DEFAULT_BODY_COLOR
+            return KoboldEntity.DEFAULT_BODY_COLOR;
         }
     }
 
@@ -67,11 +68,7 @@ public enum EyeAndKoboldColor {
         for (EyeAndKoboldColor color : values()) {
             if (color.woolMeta == id) return color;
         }
-        return KoboldEntity.DEFAULT_COLOR;
-    }
-
-    public static EyeAndKoboldColor getByIndex(int index) {
-        EyeAndKoboldColor[] vals = values();
-        return vals[Math.max(0, Math.min(index, vals.length - 1))];
+        // 🚨 REPARACIÓN: Cambiamos a DEFAULT_BODY_COLOR
+        return KoboldEntity.DEFAULT_BODY_COLOR;
     }
 }

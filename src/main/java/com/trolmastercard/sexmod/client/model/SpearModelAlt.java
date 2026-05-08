@@ -68,7 +68,6 @@ public class SpearModelAlt extends EntityModel<Entity> implements IBoneAccessor 
 
     // ── IBoneAccessor ────────────────────────────────────────────────────────
 
-    @Override
     public ModelPart getRootBone() {
         return this.altSpearPart;
     }
@@ -78,5 +77,11 @@ public class SpearModelAlt extends EntityModel<Entity> implements IBoneAccessor 
         part.xRot = xRot;
         part.yRot = yRot;
         part.zRot = zRot;
+    }
+    @Override
+    public ModelPart getBoneRoot() {
+        // Asegúrate de devolver la variable del hueso principal que use esta clase
+        // Puede llamarse this.root, this.spearPart, this.main, etc.
+        return this.altSpearPart;
     }
 }
